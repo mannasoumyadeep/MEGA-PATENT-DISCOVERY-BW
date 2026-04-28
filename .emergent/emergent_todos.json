@@ -1,0 +1,46 @@
+[
+  {
+    "content": "Phase 1: POC - Combined test script (scrape, download, extract, persist)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: All POC user stories validated successfully",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Backend - FastAPI setup with MongoDB",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Backend - Scraper, Downloader, Extractor services",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Backend - Background job system with progress tracking",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Backend - API endpoints (journals, patents, stats, jobs)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: Frontend - Integrate UI with backend",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: End-to-End Testing using Testing Agent",
+    "status": "in_progress"
+  },
+  {
+    "content": "Phase 3: Hardening - Add retry logic and error handling",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 3: Hardening - Performance optimization and caching",
+    "status": "pending"
+  },
+  {
+    "content": "Phase 3: Final Testing and Polish",
+    "status": "pending"
+  }
+]
