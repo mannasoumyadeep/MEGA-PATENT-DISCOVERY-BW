@@ -319,10 +319,16 @@ async def get_stats(journal_no: str = ""):
     by_field = await db.patents.aggregate(pipeline_field).to_list(length=100)
     by_field = [{"field": item["_id"], "count": item["count"]} for item in by_field]
     
-    # City distribution
-    pipeline_city = [{"$match": {**query, "city": {"$ne": ""}}}, {"$group": {"_id": {"city": "$city", "state": "$state"}, "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 20}]
+    # City distribution - with safety checks
+    city_query = {**query, "city": {"$ne": "", "$exists": True}}
+    pipeline_city = [
+        {"$match": city_query},
+        {"$group": {"_id": {"city": "$city", "state": "$state"}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 20}
+    ]
     by_city = await db.patents.aggregate(pipeline_city).to_list(length=20)
-    by_city = [{"city": item["_id"]["city"], "state": item["_id"]["state"], "count": item["count"]} for item in by_city]
+    by_city = [{"city": item["_id"].get("city", "Unknown"), "state": item["_id"].get("state", ""), "count": item["count"]} for item in by_city]
     
     # Pub type distribution
     pipeline_pub = [{"$match": query}, {"$group": {"_id": "$pub_type", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
@@ -351,8 +357,14 @@ async def get_fields():
 def run_download_job(job_id: str, journal_no: str, force: bool = False):
     """
     Background job to download and process journal
-    Runs in thread pool
+    Runs in thread pool - uses sync MongoDB client
     """
+    from pymongo import MongoClient
+    
+    # Create sync MongoDB client for background thread
+    sync_client = MongoClient(MONGO_URL)
+    sync_db = sync_client[DB_NAME]
+    
     def update_job(progress: int, message: str, status: str = "running"):
         with JOBS_LOCK:
             JOBS[job_id].update({
@@ -367,14 +379,15 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
         
         # Download PDFs
         update_job(10, "Downloading PDFs...")
-        pdfs = download_journal_pdfs(journal_no, job_id, update_job)
+        pdfs = download_journal_pdfs(journal_no, job_id, update_job, sync_db)
         
         if not pdfs:
             update_job(100, "Download failed", "failed")
-            asyncio.run(db.journals.update_one(
+            sync_db.journals.update_one(
                 {"journal_no": journal_no},
                 {"$set": {"status": "failed"}}
-            ))
+            )
+            sync_client.close()
             return
         
         # Extract patents
@@ -389,18 +402,18 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
             if patents:
                 for patent in patents:
                     patent["pub_type"] = pub_type
-                    asyncio.run(db.patents.update_one(
+                    sync_db.patents.update_one(
                         {"application_no": patent["application_no"]},
                         {"$set": patent},
                         upsert=True
-                    ))
+                    )
                 total_patents += len(patents)
             
             progress = 55 + (i + 1) * (40 // max(len(pdfs), 1))
             update_job(progress, f"Extracted {total_patents} patents...")
         
         # Update journal
-        asyncio.run(db.journals.update_one(
+        sync_db.journals.update_one(
             {"journal_no": journal_no},
             {"$set": {
                 "status": "processed",
@@ -409,16 +422,18 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
                 "part2_local": pdfs[1] if len(pdfs) > 1 else None,
                 "processed_at": datetime.utcnow(),
             }}
-        ))
+        )
         
         update_job(100, f"Done! {total_patents} patents from Journal {journal_no}", "complete")
         
     except Exception as e:
         log.exception(f"Job {job_id} failed")
         update_job(100, f"Error: {str(e)}", "failed")
+    finally:
+        sync_client.close()
 
 
-def download_journal_pdfs(journal_no: str, job_id: str, update_fn) -> List[str]:
+def download_journal_pdfs(journal_no: str, job_id: str, update_fn, sync_db) -> List[str]:
     """
     Download PDFs for a journal
     Returns list of downloaded file paths
@@ -426,8 +441,8 @@ def download_journal_pdfs(journal_no: str, job_id: str, update_fn) -> List[str]:
     jdir = DOWNLOADS_DIR / journal_no.replace("/", "_")
     jdir.mkdir(parents=True, exist_ok=True)
     
-    # Get filenames from database
-    journal = asyncio.run(db.journals.find_one({"journal_no": journal_no}))
+    # Get filenames from database using sync client
+    journal = sync_db.journals.find_one({"journal_no": journal_no})
     
     downloaded = []
     filenames = []
