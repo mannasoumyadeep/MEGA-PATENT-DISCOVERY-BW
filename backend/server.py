@@ -1,6 +1,6 @@
 """
-Patent Journal Extraction Dashboard - FastAPI Backend
-Migrated from Flask/SQLite to FastAPI/MongoDB
+Mega Patent Discovery Platform - FastAPI Backend
+Focused on identifying high-value patents with comprehensive claims and documentation
 """
 
 import asyncio
@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -15,7 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -43,7 +44,8 @@ except ImportError:
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
-for d in [DATA_DIR, DOWNLOADS_DIR]:
+UPLOADS_DIR = DATA_DIR / "uploads"
+for d in [DATA_DIR, DOWNLOADS_DIR, UPLOADS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/")
@@ -58,7 +60,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("patent_backend")
 
 # FastAPI app
-app = FastAPI(title="Patent Journal API", version="2.0.0")
+app = FastAPI(title="Mega Patent Discovery API", version="2.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -99,6 +101,7 @@ async def startup_db():
     await db.patents.create_index("field")
     await db.patents.create_index("city")
     await db.patents.create_index("state")
+    await db.patents.create_index("mega_score")  # New index for mega patents
     
     log.info("MongoDB connected and indexes created")
 
@@ -119,6 +122,11 @@ class DownloadRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
+    # Check if we have processed journals
+    processed_count = await db.journals.count_documents({"status": "processed"})
+    total_patents = await db.patents.count_documents({})
+    mega_patents = await db.patents.count_documents({"mega_score": {"$gte": 65}})
+    
     return {
         "status": "ok",
         "db": str(MONGO_URL),
@@ -126,12 +134,17 @@ async def health():
         "services": {
             "pdfplumber": HAS_PDFPLUMBER,
             "selenium": HAS_SELENIUM,
+        },
+        "stats": {
+            "processed_journals": processed_count,
+            "total_patents": total_patents,
+            "mega_patents": mega_patents,
         }
     }
 
 
 @app.get("/api/journals")
-async def list_journals(refresh: str = "0", full: str = "0", limit: int = 200):
+async def list_journals(refresh: str = "0", full: str = "0", limit: int = 300):
     """List available journals"""
     
     # Check if refresh needed
@@ -142,6 +155,14 @@ async def list_journals(refresh: str = "0", full: str = "0", limit: int = 200):
         if journals:
             # Upsert journals
             for j in journals:
+                # Check if PDFs exist locally
+                j_dir = DOWNLOADS_DIR / j["journal_no"].replace("/", "_")
+                if j_dir.exists():
+                    pdfs = list(j_dir.glob("*.pdf"))
+                    if pdfs:
+                        j["has_local_pdfs"] = True
+                        j["local_pdf_paths"] = [str(p) for p in pdfs]
+                
                 await db.journals.update_one(
                     {"journal_no": j["journal_no"]},
                     {"$set": {
@@ -163,13 +184,14 @@ async def list_journals(refresh: str = "0", full: str = "0", limit: int = 200):
             "pub_date": j.get("pub_date", ""),
             "status": j.get("status", "available"),
             "patents_count": j.get("patents_count", 0),
-            "has_local": bool(j.get("part1_local")),
+            "mega_patents_count": j.get("mega_patents_count", 0),
+            "has_local": bool(j.get("part1_local") or j.get("has_local_pdfs")),
             "has_download": bool(j.get("part1_filename") or j.get("part2_filename")),
             "processed_at": j.get("processed_at"),
         })
     
-    # Sort by date
-    result.sort(key=lambda x: x["pub_date"], reverse=True)
+    # Sort by date (latest first)
+    result.sort(key=lambda x: x["pub_date"].split("/")[::-1] if x["pub_date"] else "0", reverse=True)
     
     # Add upcoming journal
     next_fri = datetime.utcnow() + timedelta(days=(4 - datetime.utcnow().weekday()) % 7 or 7)
@@ -178,6 +200,7 @@ async def list_journals(refresh: str = "0", full: str = "0", limit: int = 200):
         "pub_date": next_fri.strftime("%d/%m/%Y"),
         "status": "upcoming",
         "patents_count": 0,
+        "mega_patents_count": 0,
         "has_local": False,
         "has_download": False,
         "processed_at": None,
@@ -218,6 +241,70 @@ async def download_journal(req: DownloadRequest, background_tasks: BackgroundTas
     return {"job_id": job_id, "status": "started", "journal_no": journal_no}
 
 
+@app.post("/api/journals/upload")
+async def upload_journal_pdfs(
+    journal_no: str = Form(...),
+    files: List[UploadFile] = File(...),
+    background_tasks: BackgroundTasks = None
+):
+    """Upload PDFs manually for processing"""
+    if not journal_no or not files:
+        raise HTTPException(400, "journal_no and files required")
+    
+    # Create upload directory
+    j_dir = UPLOADS_DIR / journal_no.replace("/", "_")
+    j_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save uploaded files
+    saved_files = []
+    for i, file in enumerate(files):
+        if not file.filename.endswith(".pdf"):
+            continue
+        
+        dest = j_dir / f"manual_part{i+1}_{file.filename}"
+        with open(dest, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        saved_files.append(str(dest))
+        log.info(f"Saved uploaded PDF: {dest.name} ({len(content)} bytes)")
+    
+    if not saved_files:
+        raise HTTPException(400, "No valid PDF files uploaded")
+    
+    # Create processing job
+    job_id = str(uuid.uuid4())
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "job_id": job_id,
+            "journal_no": journal_no,
+            "status": "running",
+            "progress": 0,
+            "message": "Processing uploaded PDFs",
+            "started_at": datetime.utcnow().isoformat(),
+        }
+    
+    # Update journal
+    await db.journals.update_one(
+        {"journal_no": journal_no},
+        {"$set": {
+            "status": "processing",
+            "source": "manual_upload",
+            "uploaded_at": datetime.utcnow(),
+        }},
+        upsert=True
+    )
+    
+    # Start processing
+    background_tasks.add_task(process_uploaded_pdfs, job_id, journal_no, saved_files)
+    
+    return {
+        "job_id": job_id,
+        "journal_no": journal_no,
+        "files_uploaded": len(saved_files),
+        "status": "processing"
+    }
+
+
 @app.get("/api/jobs/{job_id}")
 async def get_job(job_id: str):
     """Get job status"""
@@ -248,7 +335,8 @@ async def get_patents(
     state: str = "",
     pub_type: str = "",
     search: str = "",
-    sort: str = "num_claims",
+    sort: str = "mega_score",
+    mega_only: str = "0",
     limit: int = 200,
     offset: int = 0,
 ):
@@ -265,17 +353,20 @@ async def get_patents(
         query["state"] = state
     if pub_type:
         query["pub_type"] = pub_type
+    if mega_only == "1":
+        query["mega_score"] = {"$gte": 65}
     if search:
         query["$or"] = [
             {"title": {"$regex": search, "$options": "i"}},
             {"abstract": {"$regex": search, "$options": "i"}},
+            {"applicants": {"$regex": search, "$options": "i"}},
         ]
     
     # Count total
     total = await db.patents.count_documents(query)
     
     # Fetch patents
-    sort_field = sort if sort in ["num_claims", "num_pages", "filing_date", "publication_date"] else "num_claims"
+    sort_field = sort if sort in ["num_claims", "num_pages", "filing_date", "publication_date", "mega_score"] else "mega_score"
     cursor = db.patents.find(query).sort(sort_field, -1).skip(offset).limit(limit)
     patents = await cursor.to_list(length=limit)
     
@@ -284,6 +375,21 @@ async def get_patents(
         p["id"] = str(p.pop("_id"))
     
     return {"patents": patents, "total": total, "limit": limit, "offset": offset}
+
+
+@app.get("/api/mega-patents")
+async def get_mega_patents(limit: int = 50, offset: int = 0):
+    """Get top mega patents (score >= 65)"""
+    query = {"mega_score": {"$gte": 65}}
+    total = await db.patents.count_documents(query)
+    
+    cursor = db.patents.find(query).sort("mega_score", -1).skip(offset).limit(limit)
+    patents = await cursor.to_list(length=limit)
+    
+    for p in patents:
+        p["id"] = str(p.pop("_id"))
+    
+    return {"mega_patents": patents, "total": total}
 
 
 @app.get("/api/stats")
@@ -300,11 +406,12 @@ async def get_stats(journal_no: str = ""):
             "avg_claims": {"$avg": "$num_claims"},
             "avg_pages": {"$avg": "$num_pages"},
             "max_claims": {"$max": "$num_claims"},
+            "avg_mega_score": {"$avg": "$mega_score"},
         }}
     ]
     result = await db.patents.aggregate(pipeline).to_list(length=1)
     overview = result[0] if result else {
-        "total": 0, "avg_claims": 0, "avg_pages": 0, "max_claims": 0
+        "total": 0, "avg_claims": 0, "avg_pages": 0, "max_claims": 0, "avg_mega_score": 0
     }
     overview.pop("_id", None)
     
@@ -314,12 +421,16 @@ async def get_stats(journal_no: str = ""):
     overview["cities"] = len([c for c in cities if c])
     overview["states"] = len([s for s in states if s])
     
+    # Mega patents count
+    mega_query = {**query, "mega_score": {"$gte": 65}}
+    overview["mega_patents"] = await db.patents.count_documents(mega_query)
+    
     # Field distribution
     pipeline_field = [{"$match": query}, {"$group": {"_id": "$field", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
     by_field = await db.patents.aggregate(pipeline_field).to_list(length=100)
     by_field = [{"field": item["_id"], "count": item["count"]} for item in by_field]
     
-    # City distribution - with safety checks
+    # City distribution
     city_query = {**query, "city": {"$ne": "", "$exists": True}}
     pipeline_city = [
         {"$match": city_query},
@@ -335,11 +446,24 @@ async def get_stats(journal_no: str = ""):
     by_pub_type = await db.patents.aggregate(pipeline_pub).to_list(length=10)
     by_pub_type = [{"pub_type": item["_id"], "count": item["count"]} for item in by_pub_type]
     
+    # Mega score distribution
+    pipeline_mega = [
+        {"$match": query},
+        {"$bucket": {
+            "groupBy": "$mega_score",
+            "boundaries": [0, 30, 50, 65, 80, 100],
+            "default": "Other",
+            "output": {"count": {"$sum": 1}}
+        }}
+    ]
+    mega_dist = await db.patents.aggregate(pipeline_mega).to_list(length=10)
+    
     return {
         "overview": overview,
         "by_field": by_field,
         "by_city": by_city,
         "by_pub_type": by_pub_type,
+        "mega_distribution": mega_dist,
     }
 
 
@@ -352,7 +476,31 @@ async def get_fields():
     return {"fields": fields}
 
 
-# ─── BACKGROUND JOB ────────────────────────────────────────────────────────────
+# ─── BACKGROUND JOBS ──────────────────────────────────────────────────────────
+
+def calculate_mega_score(patent: dict) -> int:
+    """Calculate mega score: 0-100 based on claims, pages, and other factors"""
+    claims = patent.get("num_claims", 0)
+    pages = patent.get("num_pages", 0)
+    
+    # Base score from claims (0-50 points)
+    claims_score = min(claims * 2.5, 50)
+    
+    # Score from pages (0-40 points)
+    pages_score = min(pages * 0.8, 40)
+    
+    # Bonus for applicants/inventors (0-10 points)
+    bonus = 0
+    if len(patent.get("applicants", [])) > 1:
+        bonus += 3
+    if len(patent.get("inventors", [])) > 1:
+        bonus += 3
+    if len(patent.get("ipc_codes", [])) > 2:
+        bonus += 4
+    
+    total = int(claims_score + pages_score + bonus)
+    return min(total, 100)
+
 
 def run_download_job(job_id: str, journal_no: str, force: bool = False):
     """
@@ -377,22 +525,31 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
     try:
         update_job(5, f"Starting Journal {journal_no}...")
         
-        # Download PDFs
-        update_job(10, "Downloading PDFs...")
-        pdfs = download_journal_pdfs(journal_no, job_id, update_job, sync_db)
+        # Check if already processed locally
+        j_dir = DOWNLOADS_DIR / journal_no.replace("/", "_")
+        existing_pdfs = list(j_dir.glob("*.pdf")) if j_dir.exists() else []
         
-        if not pdfs:
-            update_job(100, "Download failed", "failed")
-            sync_db.journals.update_one(
-                {"journal_no": journal_no},
-                {"$set": {"status": "failed"}}
-            )
-            sync_client.close()
-            return
+        if existing_pdfs and not force:
+            update_job(15, f"Using {len(existing_pdfs)} cached PDF(s)...")
+            pdfs = [str(p) for p in existing_pdfs]
+        else:
+            # Download PDFs
+            update_job(10, "Downloading PDFs...")
+            pdfs = download_journal_pdfs(journal_no, job_id, update_job, sync_db)
+            
+            if not pdfs:
+                update_job(100, "Download failed", "failed")
+                sync_db.journals.update_one(
+                    {"journal_no": journal_no},
+                    {"$set": {"status": "failed"}}
+                )
+                sync_client.close()
+                return
         
         # Extract patents
         update_job(55, f"Extracting from {len(pdfs)} PDF(s)...")
         total_patents = 0
+        mega_count = 0
         
         for i, pdf_path in enumerate(pdfs):
             pub_type = determine_pub_type_from_filename(Path(pdf_path).name)
@@ -402,6 +559,10 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
             if patents:
                 for patent in patents:
                     patent["pub_type"] = pub_type
+                    patent["mega_score"] = calculate_mega_score(patent)
+                    if patent["mega_score"] >= 65:
+                        mega_count += 1
+                    
                     sync_db.patents.update_one(
                         {"application_no": patent["application_no"]},
                         {"$set": patent},
@@ -410,7 +571,7 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
                 total_patents += len(patents)
             
             progress = 55 + (i + 1) * (40 // max(len(pdfs), 1))
-            update_job(progress, f"Extracted {total_patents} patents...")
+            update_job(progress, f"Extracted {total_patents} patents ({mega_count} MEGA)...")
         
         # Update journal
         sync_db.journals.update_one(
@@ -418,16 +579,88 @@ def run_download_job(job_id: str, journal_no: str, force: bool = False):
             {"$set": {
                 "status": "processed",
                 "patents_count": total_patents,
+                "mega_patents_count": mega_count,
                 "part1_local": pdfs[0] if pdfs else None,
                 "part2_local": pdfs[1] if len(pdfs) > 1 else None,
                 "processed_at": datetime.utcnow(),
             }}
         )
         
-        update_job(100, f"Done! {total_patents} patents from Journal {journal_no}", "complete")
+        update_job(100, f"✓ {total_patents} patents ({mega_count} MEGA) from Journal {journal_no}", "complete")
         
     except Exception as e:
         log.exception(f"Job {job_id} failed")
+        update_job(100, f"Error: {str(e)}", "failed")
+    finally:
+        sync_client.close()
+
+
+def process_uploaded_pdfs(job_id: str, journal_no: str, pdf_paths: List[str]):
+    """Process manually uploaded PDFs"""
+    from pymongo import MongoClient
+    
+    sync_client = MongoClient(MONGO_URL)
+    sync_db = sync_client[DB_NAME]
+    
+    def update_job(progress: int, message: str, status: str = "running"):
+        with JOBS_LOCK:
+            JOBS[job_id].update({
+                "progress": progress,
+                "message": message,
+                "status": status,
+            })
+        log.info(f"[{job_id[:8]}] {progress}% {message}")
+    
+    try:
+        update_job(10, f"Processing {len(pdf_paths)} uploaded PDF(s)...")
+        
+        total_patents = 0
+        mega_count = 0
+        
+        for i, pdf_path in enumerate(pdf_paths):
+            pub_type = determine_pub_type_from_filename(Path(pdf_path).name)
+            patents = extract_patents_from_pdf(pdf_path, journal_no)
+            
+            if patents:
+                for patent in patents:
+                    patent["pub_type"] = pub_type
+                    patent["mega_score"] = calculate_mega_score(patent)
+                    if patent["mega_score"] >= 65:
+                        mega_count += 1
+                    
+                    sync_db.patents.update_one(
+                        {"application_no": patent["application_no"]},
+                        {"$set": patent},
+                        upsert=True
+                    )
+                total_patents += len(patents)
+            
+            progress = 10 + (i + 1) * (85 // len(pdf_paths))
+            update_job(progress, f"Extracted {total_patents} patents ({mega_count} MEGA)...")
+        
+        # Copy to downloads for persistence
+        dest_dir = DOWNLOADS_DIR / journal_no.replace("/", "_")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for pdf_path in pdf_paths:
+            dest = dest_dir / Path(pdf_path).name
+            shutil.copy2(pdf_path, dest)
+        
+        # Update journal
+        sync_db.journals.update_one(
+            {"journal_no": journal_no},
+            {"$set": {
+                "status": "processed",
+                "patents_count": total_patents,
+                "mega_patents_count": mega_count,
+                "processed_at": datetime.utcnow(),
+                "source": "manual_upload",
+            }}
+        )
+        
+        update_job(100, f"✓ {total_patents} patents ({mega_count} MEGA) processed!", "complete")
+        
+    except Exception as e:
+        log.exception(f"Upload processing job {job_id} failed")
         update_job(100, f"Error: {str(e)}", "failed")
     finally:
         sync_client.close()
