@@ -29,7 +29,7 @@
   },
   {
     "content": "Phase 2.7: Frontend testing - Run testing agent for E2E smoke tests, verify dashboard loads, jobs work, filtering works, detail drawer renders correctly",
-    "status": "in_progress"
+    "status": "completed"
   },
   {
     "content": "Phase 3: Backend refactoring - Modularize high-complexity functions in services.py and server.py (extract_patents_from_pdf, download_pdfs_selenium, run_download_job, get_stats)",
