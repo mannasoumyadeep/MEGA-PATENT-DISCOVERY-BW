@@ -27,6 +27,16 @@ const CITY_COORDS = {
 
 const W=370, H=470;
 
+// Green density gradient for heatmap
+function DENSITY_GREEN(intensity) {
+  const shades = [
+    "#f0fdf4", "#dcfce7", "#bbf7d0", "#86efac", "#4ade80", 
+    "#22c55e", "#16a34a", "#15803d", "#166534", "#14532d"
+  ];
+  const idx = Math.min(Math.floor(intensity * 10), 9);
+  return shades[idx];
+}
+
 function h2r(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
 function statusColor(s){return s==="processed"?"#16a34a":s==="upcoming"?"#6366f1":s==="running"?"#d97706":s==="failed"?"#dc2626":"#d1d5db";}
 function statusLabel(s){return s==="processed"?"✓ Processed":s==="upcoming"?"⏳ Upcoming":s==="running"?"⟳ Downloading":s==="failed"?"✗ Failed":s==="queued"?"… Queued":"○ Available";}
@@ -96,8 +106,8 @@ function IndiaMap({ patents, selectedCity, focusField, onCityClick, onCityHover 
     <svg width={W} height={H} style={{display:"block",overflow:"visible"}}>
       <rect x={0} y={0} width={W} height={H} fill="#fafafa"/>
       {indiaPath
-        ?<path d={indiaPath} fill="#f0f0f0" stroke="#d4d4d4" strokeWidth={0.8}/>
-        :<rect x={30} y={10} width={310} height={450} rx={6} fill="#f0f0f0" stroke="#ddd" strokeDasharray="6,4"/>
+        ?<path d={indiaPath} fill="#e8f5e9" stroke="#81c784" strokeWidth={0.6}/>
+        :<rect x={30} y={10} width={310} height={450} rx={6} fill="#e8f5e9" stroke="#81c784" strokeDasharray="6,4"/>
       }
       {proj && Object.entries(CITY_COORDS).map(([city,[lng,lat]])=>{
         const stat=cityStats[city];
@@ -136,22 +146,23 @@ function IndiaMap({ patents, selectedCity, focusField, onCityClick, onCityHover 
 function FieldHeatmap({ patents, focusField, onFieldClick }) {
   const counts = useMemo(()=>{const c={};patents.forEach(p=>{c[p.field]=(c[p.field]||0)+1;});return c;},[patents]);
   const total=patents.length||1;
+  const maxCount = Math.max(...Object.values(counts), 1);
   const sorted=Object.keys(FIELD_PALETTE).filter(f=>counts[f]>0).sort((a,b)=>(counts[b]||0)-(counts[a]||0));
   return(
     <div style={{padding:"12px 16px 14px"}}>
       <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#c8c8c8",marginBottom:10}}>
-        Field Heatmap <span style={{color:"#ddd",fontSize:8,marginLeft:4}}>click to spotlight</span>
+        Technology Density <span style={{color:"#ddd",fontSize:8,marginLeft:4}}>green intensity = volume</span>
       </div>
       {sorted.map(field=>{
-        const n=counts[field]||0,pct=n/total,col=FIELD_PALETTE[field],isOn=focusField===field,dim=focusField&&focusField!=="All"&&!isOn;
+        const n=counts[field]||0,pct=n/total,intensity=n/maxCount,greenShade=DENSITY_GREEN(intensity),isOn=focusField===field,dim=focusField&&focusField!=="All"&&!isOn;
         return(
           <div key={field} className="field-row" style={{opacity:dim?0.2:1}} onClick={()=>onFieldClick(isOn?"All":field)}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:col,flexShrink:0}}/>
+            <div style={{width:7,height:7,borderRadius:"50%",background:greenShade,border:`1px solid ${isOn?"#16a34a":"#86efac"}`,flexShrink:0}}/>
             <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:10.5,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:isOn?"#111":"#555",fontWeight:isOn?600:400}}>{field}</div>
             <div style={{width:68,background:"#f0f0f0",height:4,borderRadius:2,flexShrink:0}}>
-              <div className="hm-bar" style={{width:`${pct*100}%`,background:col,opacity:isOn?1:0.55}}/>
+              <div className="hm-bar" style={{width:`${pct*100}%`,background:greenShade,opacity:isOn?1:0.7}}/>
             </div>
-            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#ccc",width:18,textAlign:"right",flexShrink:0}}>{n}</div>
+            <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#666",width:18,textAlign:"right",flexShrink:0}}>{n}</div>
           </div>
         );
       })}
@@ -170,7 +181,15 @@ function JournalPanel({ activeJournal, onSelect }) {
     try {
       const r = await fetch(`${API}/api/journals${refresh?"?refresh=1":""}`);
       const d = await r.json();
-      setJournals(d.journals||[]);
+      // Sort journals by date (latest first, Friday to Friday)
+      const sorted = (d.journals||[]).sort((a,b)=>{
+        if(a.journal_no==="UPCOMING")return -1;
+        if(b.journal_no==="UPCOMING")return 1;
+        const dateA=a.pub_date.split("/").reverse().join("");
+        const dateB=b.pub_date.split("/").reverse().join("");
+        return dateB.localeCompare(dateA);
+      });
+      setJournals(sorted);
     } catch(e) { console.error(e); }
     setScraping(false); setLoading(false);
   }, []);
@@ -314,6 +333,7 @@ export default function PatentWatch() {
     if(sortBy==="num_claims") p.sort((a,b)=>b.num_claims-a.num_claims);
     else if(sortBy==="num_pages") p.sort((a,b)=>b.num_pages-a.num_pages);
     else if(sortBy==="filing_date") p.sort((a,b)=>(b.filing_date||"").localeCompare(a.filing_date||""));
+    else if(sortBy==="mega") p.sort((a,b)=>((b.num_claims||0)+(b.num_pages||0))-((a.num_claims||0)+(a.num_pages||0)));
     return p;
   },[patents,sortBy]);
 
@@ -352,20 +372,21 @@ export default function PatentWatch() {
           </div>
         )}
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",borderBottom:"1px solid #efefef",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",borderBottom:"1px solid #efefef",flexShrink:0}}>
           {[
             {n:overviewStats?.total??displayPatents.length,label:"Patents",sub:activeJournal||"all journals"},
             {n:overviewStats?.cities??new Set(displayPatents.map(p=>p.city).filter(Boolean)).size,label:"Cities",sub:"publishing"},
-            {n:overviewStats?.avg_claims??(displayPatents.length?(displayPatents.reduce((s,p)=>s+(p.num_claims||0),0)/displayPatents.length).toFixed(1):"—"),label:"Avg Claims",sub:"per patent"},
-            {n:overviewStats?.max_claims??Math.max(...displayPatents.map(p=>p.num_claims||0),0),label:"Most Claims",sub:"single patent"},
-            {n:overviewStats?.avg_pages??(displayPatents.length?(displayPatents.reduce((s,p)=>s+(p.num_pages||0),0)/displayPatents.length).toFixed(1):"—"),label:"Avg Pages",sub:"per patent"},
+            {n:Math.round(overviewStats?.avg_claims??(displayPatents.length?(displayPatents.reduce((s,p)=>s+(p.num_claims||0),0)/displayPatents.length):0)),label:"Avg Claims",sub:"per patent"},
+            {n:Math.round(overviewStats?.max_claims??Math.max(...displayPatents.map(p=>p.num_claims||0),0)),label:"Most Claims",sub:"single patent"},
+            {n:Math.round(overviewStats?.avg_pages??(displayPatents.length?(displayPatents.reduce((s,p)=>s+(p.num_pages||0),0)/displayPatents.length):0)),label:"Avg Pages",sub:"per patent"},
+            {n:displayPatents.filter(p=>(p.num_claims||0)>=15&&(p.num_pages||0)>=50).length,label:"Mega Patents",sub:"15+ claims, 50+ pages",highlight:true},
           ].map((s,i)=>(
-            <div key={i} style={{padding:"13px 20px",borderRight:i<4?"1px solid #efefef":"none"}}>
-              <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:21,fontWeight:700,letterSpacing:"-0.03em",lineHeight:1}}>
+            <div key={i} style={{padding:"13px 16px",borderRight:i<5?"1px solid #efefef":"none",background:s.highlight?"#f0fdf4":"transparent"}}>
+              <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:s.highlight?18:21,fontWeight:700,letterSpacing:"-0.03em",lineHeight:1,color:s.highlight?"#16a34a":"#111"}}>
                 {pLoading?"…":s.n}
               </div>
-              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8.5,color:"#c8c8c8",letterSpacing:"0.09em",textTransform:"uppercase",marginTop:3}}>{s.label}</div>
-              <div style={{fontSize:10,color:"#ddd",marginTop:2}}>{s.sub}</div>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8.5,color:s.highlight?"#15803d":"#c8c8c8",letterSpacing:"0.09em",textTransform:"uppercase",marginTop:3}}>{s.label}</div>
+              <div style={{fontSize:9.5,color:s.highlight?"#86efac":"#ddd",marginTop:2}}>{s.sub}</div>
             </div>
           ))}
         </div>
@@ -434,6 +455,7 @@ export default function PatentWatch() {
                     <option value="num_claims">Claims ↓</option>
                     <option value="num_pages">Pages ↓</option>
                     <option value="filing_date">Date ↓</option>
+                    <option value="mega">Mega Patents ↓</option>
                   </select>
                 </div>
                 <div style={{padding:"6px 20px",borderBottom:"1px solid #f8f8f8",fontFamily:"'JetBrains Mono',monospace",fontSize:8.5,color:"#d0d0d0",letterSpacing:"0.07em",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
@@ -477,9 +499,10 @@ export default function PatentWatch() {
                             </div>
                           </div>
                           <div style={{textAlign:"right",flexShrink:0}}>
-                            <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:21,fontWeight:700,letterSpacing:"-0.02em",lineHeight:1,color:isSel?"#fff":"#111"}}>{p.num_claims}</div>
+                            <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:21,fontWeight:700,letterSpacing:"-0.02em",lineHeight:1,color:isSel?"#fff":"#111"}}>{Math.round(p.num_claims||0)}</div>
                             <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:isSel?"#666":"#d0d0d0",letterSpacing:"0.07em",textTransform:"uppercase",marginTop:2}}>claims</div>
                             <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:isSel?"#555":"#d8d8d8",marginTop:6}}>{p.num_pages}p</div>
+                            {(p.num_claims>=15&&p.num_pages>=50)&&<div style={{fontSize:7,color:isSel?"#4ade80":"#16a34a",marginTop:3,fontWeight:600}}>MEGA</div>}
                           </div>
                         </div>
                       </div>
