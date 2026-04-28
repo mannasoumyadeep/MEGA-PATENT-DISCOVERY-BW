@@ -1,138 +1,134 @@
-# plan.md — Patent Journal Data Extraction Dashboard
+# plan.md — Mega Patent Discovery Dashboard (Refactor + Strict B&W)
 
-## 1) Objectives
-- Deliver a **public, no-auth** dashboard where any user can:
-  - See latest **IP India Patent Journals**
-  - Trigger **download + PDF extraction** jobs with **live progress**
-  - Browse/search/filter extracted patent data
-  - View stats + visualizations (India city map, field heatmap)
-- Migrate existing working logic (Flask/SQLite) to **FastAPI + MongoDB**, keeping the workflow resilient to website changes.
-- Optimize for long-running workloads: **idempotent jobs, caching, resume/retry, minimal re-downloads**.
+## 1. Objectives
+- Restore frontend code health by refactoring the monolithic `App.js` into small, testable components and hooks.
+- Implement a strict **Black / White / Gray-only** editorial UI (no color accents, no gradients, no emojis).
+- Fix known correctness issues: React hook dependency bugs, index-as-key usage, silent catches/log noise.
+- Fix data semantics: remove the “International Classification” string from applicant tags and present it as metadata (IPC).
+- Keep the core workflow stable: **trigger download → job progress → processed patents visible → detail view + downloads**.
 
----
+## 2. Implementation Steps
 
-## 2) Implementation Steps
+### Phase 1 — Core workflow POC validation (isolation; do not redesign yet)
+User stories
+1. As a user, I can trigger a journal download and see a job id immediately.
+2. As a user, I can poll a job and see progress move from 0→100 with a final status.
+3. As a user, I can list processed journals and see counts populate.
+4. As a user, I can fetch patents filtered by `journal_no` and `mega_only=1`.
+5. As a user, I can open a single patent record and see applicants + IPC codes separated.
 
-### Phase 1 — Core Workflow POC (Isolation: scrape → download → extract → persist → query)
-**Why:** Scraping + Selenium + large PDFs + regex extraction are the failure-prone core. Do not proceed until stable.
+Steps
+- Add/refresh a small backend smoke test script (curl or python) that runs:
+  - `GET /api/health` → ok
+  - `GET /api/journals?refresh=1` → non-empty
+  - `POST /api/journals/download` for one journal → job_id
+  - Poll `GET /api/jobs/{job_id}` until complete
+  - `GET /api/patents?limit=5&mega_only=1` → patents
+- Websearch checkpoint: confirm IP India journal page selectors + download endpoints are still valid; document any drift.
+- Fix any P0 backend breakage found during POC only (no refactor yet).
 
-**User stories (POC)**
-1. As a user, I can request the journal list and see at least N recent journals.
-2. As a user, I can trigger a job for a journal and get a job_id immediately.
-3. As a user, I can poll job status and see % progress + stage messages.
-4. As a user, I can download at least one journal part and store it locally.
-5. As a user, I can extract patents from the PDF and query them back via API.
-
-**Steps**
-1. Web research (best practices)
-   - Confirm current IPO journal page behavior (DataTables, form POST download, anti-bot patterns).
-   - Validate best-practice Selenium download patterns in headless Chrome (download dir prefs, waits).
-2. Create standalone POC scripts (no app yet)
-   - `poc_scrape_journals.py`: requests+BS4 first; fallback to Selenium extraction if needed.
-   - `poc_download_pdf.py`: direct POST download using `FileName`; fallback Selenium click-download.
-   - `poc_extract_pdf.py`: pdfplumber extraction on a real downloaded PDF; verify regexes.
-   - `poc_mongo_roundtrip.py`: insert journals/patents into Mongo; query with filters.
-3. Define canonical data model (minimal fields first)
-   - Journal: `journal_no, pub_date, filenames{part1,part2,part3}, local_paths, status, patents_count, scraped_at, processed_at`
-   - Patent: `application_no (unique), journal_no, title, applicants[], inventors[], ipc_codes[], field, city,state, pub_type, num_pages,num_claims, filing_date, publication_date, abstract, priority_*`
-4. POC acceptance loop
-   - Run end-to-end for 1 journal: scrape → download (>=1 PDF) → extract (>=50 patents) → persist → query.
-   - Fix selectors/regex until consistent.
-5. Document POC learnings
-   - Stable selectors, retry policy, expected download sizes/time, known failure modes.
-
-**Exit criteria**
-- One journal fully processed successfully in the target environment using Selenium + pdfplumber.
-- Mongo contains patents; API-like queries can filter by journal/city/field and return results.
+Deliverable: core flow proven working end-to-end before UI refactor.
 
 ---
 
-### Phase 2 — V1 App Development (FastAPI + MongoDB + React/Vite)
-**User stories (V1)**
-1. As a user, I can see a list of journals with statuses (available/queued/running/processed/failed).
-2. As a user, I can click “Get” to start processing a journal and track progress live.
-3. As a user, I can select a processed journal and browse patents sorted by claims/pages/date.
-4. As a user, I can filter by field and city and search across title/abstract/applicants.
-5. As a user, I can view insights (top cities, field distribution, pub type split) for all journals or a selected journal.
+### Phase 2 — V1 App development (refactor + strict B&W redesign)
+User stories
+1. As a user, I can see an empty-state onboarding explaining that data is not preloaded and how to start downloads.
+2. As a user, I can browse journals, start download/upload, and see job progress inline.
+3. As a user, I can filter/search/sort patents and quickly find “Mega” items.
+4. As a user, I can use the India map to filter by city with clear grayscale pins.
+5. As a user, I can open a patent detail drawer and read title/abstract/claims/metadata clearly.
 
-**Backend (FastAPI)**
-1. Project setup
-   - `server/` FastAPI app, env config, CORS, logging.
-   - Mongo connection (Motor) + indexes (unique `application_no`, `journal_no`, `city`, `field`).
-2. Core services (ported from backend.py)
-   - Scraper service: HTTP scrape first; Selenium list scrape fallback.
-   - Downloader service: direct POST by filename; Selenium fallback; disk caching per journal.
-   - Extractor service: pdfplumber parse; corrected `pub_type` mapping by part.
-3. Background job system (in-memory for v1)
-   - Endpoints: `POST /api/journals/{jno}/process`, `GET /api/jobs/{job_id}`, `GET /api/jobs`.
-   - Job states + progress stages: queued → downloading → extracting → saving → complete/failed.
-   - Idempotency: if journal already processed and files exist, skip re-download unless `force=1`.
-4. API endpoints for UI
-   - `GET /api/health`
-   - `GET /api/journals?refresh=0|1|full`
-   - `GET /api/patents` (filters + pagination + sort; export flag)
-   - `GET /api/stats?journal_no=`
-   - `GET /api/fields`
+Refactor (frontend)
+- Split `src/App.js` into:
+  - `src/hooks/useDashboardData.js` (journals/patents/stats/jobs + polling)
+  - `src/components/dashboard/MetricsBar.js`
+  - `src/components/dashboard/JournalsPanel.js`
+  - `src/components/dashboard/MapPanel.js` (wraps `IndiaMap`)
+  - `src/components/dashboard/PatentsPanel.js`
+  - `src/components/dashboard/PatentDetailDrawer.js`
+  - `src/components/modals/WelcomeDialog.js` (wrap existing `WelcomeModal` or replace)
+  - `src/components/modals/UploadDialog.js`
+- Apply code review fixes while refactoring:
+  - Correct hook deps (no missing dependencies; no stale closures)
+  - Replace index-as-key with stable keys (journal_no, application_no/id, filename)
+  - Replace empty catches with `logError` + user-visible toasts where appropriate
+  - Remove production console logs; keep dev-only guarded logging
+  - Remove nested ternaries in render paths (extract helpers/components)
 
-**Frontend (React/Vite)**
-1. Integrate existing UI (patent_watch.jsx → App)
-   - Replace hardcoded ngrok API with `import.meta.env.VITE_BACKEND_URL`.
-   - Ensure journals panel can start jobs + poll job status.
-2. Data states
-   - Empty DB: show “No processed journals yet — click Get to start.”
-   - Running job: show progress bar + message per journal.
-   - Error states: failed job surfaced with retry.
-3. Keep V1 scope tight
-   - Map + heatmap + list + insights from existing component, wired to FastAPI.
+Strict B&W redesign (frontend)
+- Replace all greens/colors/emojis:
+  - Remove `FIELD_PALETTE`, `DENSITY_GREEN`, colored mega badges
+  - Use grayscale-only badges (outline) and a single black “MEGA” marker when needed
+  - Replace emoji icons with text labels or lucide-react icons
+- Implement grayscale design tokens in CSS variables; update `App.css` accordingly:
+  - Focus rings: black
+  - Progress: black fill on light gray track
+  - Selected rows/cards: black bg + white text
+  - Map: white background, light gray land, dark gray borders, solid black pins w/ white halo
+  - Heat/density: single black with opacity steps only
+- Add `data-testid` attributes to key UI elements (metrics, journals rows, download/upload, search, sort, map, detail drawer) to enable reliable testing.
 
-**End of Phase 2 testing (mandatory)**
-- One full E2E run: refresh journals → start job → completion → browse patents → filters/search/stats.
-- Run a second job to validate concurrency and caching behavior.
+Semantic fix (applicant tags)
+- Ensure applicant list shows only real applicants.
+- Ensure IPC codes are displayed under metadata as `ipc_codes` (already in schema).
+- If backend extraction injects classification into applicants, fix parsing in `services.py` (regex boundary) and add a small regression test.
 
----
-
-### Phase 3 — Hardening, Optimizations, and Quality
-**User stories (Hardening)**
-1. As a user, I can safely retry a failed journal processing job without duplicate patents.
-2. As a user, I can resume processing if a server restart occurs (at least detect partial downloads).
-3. As a user, I see fast load times because processed results are cached and indexed.
-4. As a user, I can export filtered results (CSV/XLSX) for a journal.
-5. As a user, I can process older journals (pagination/full scrape) reliably.
-
-**Work items**
-1. Robustness
-   - Retries with backoff for downloads; checksum/size thresholds.
-   - Selector resilience: multiple strategies + fallback logic.
-   - Better parsing validation (application_no presence, de-dup).
-2. Performance
-   - Avoid reprocessing: store `processed_hash` (filenames + size) and skip if unchanged.
-   - Bulk writes to Mongo; streaming extraction progress updates every N pages.
-   - Add key indexes + query projections.
-3. Job reliability upgrades
-   - Persist jobs to Mongo (replace in-memory) for restart survival.
-   - Add simple job lock per journal (prevent duplicate concurrent processing).
-4. UX improvements
-   - “Force reprocess” toggle; last processed timestamp.
-   - Better empty/error messaging in UI.
-
-**End of Phase 3 testing (mandatory)**
-- E2E test: run job → restart server mid-way → recover (or fail gracefully) → retry completes.
-- Load test basic: list journals + fetch patents with filters quickly.
+End of phase testing
+- Run frontend E2E smoke (dashboard loads, refresh journals, start job, see progress, filter patents, open detail drawer).
+- Capture screenshots for verification.
 
 ---
 
-## 3) Next Actions (Immediate)
-1. Build and run Phase 1 POC scripts against the live IPO site; iterate until stable.
-2. Finalize Mongo schemas + required indexes based on POC data.
-3. Implement FastAPI services by directly porting proven POC code paths.
-4. Wire UI to `VITE_BACKEND_URL` and validate full E2E job flow.
+### Phase 3 — Backend modularization + robustness (no behavior change)
+User stories
+1. As a developer, I can reason about scraping/downloading/extraction with small functions.
+2. As a user, failed downloads show actionable errors and do not silently stall.
+3. As a user, processing jobs always end in complete/failed and never “hang”.
+4. As a user, repeated download requests reuse cached PDFs unless forced.
+5. As a user, stats remain correct after refactors.
+
+Steps
+- Refactor high-complexity functions:
+  - `services.py`: split `extract_patents_from_pdf`, `download_pdfs_selenium`, `scrape_journals_http` into helpers (parse page, parse applicants, parse ipc, infer city/state).
+  - `server.py`: split `run_download_job`, `get_stats` helpers; standardize job update calls.
+- Improve error handling:
+  - Explicit failure states + messages; no broad except without logging.
+  - Add timeouts/retries for network calls.
+- Add minimal regression tests:
+  - Applicant parsing (no “International Classification” in applicants)
+  - IPC extraction + field mapping
+
+End of phase testing
+- Run POC script again + run a full journal job if feasible.
 
 ---
 
-## 4) Success Criteria
-- A fresh install (empty DB) allows any user to:
-  - Refresh journals list and trigger processing for a selected journal
-  - Observe real-time progress until completion
-  - Browse/search/filter extracted patents and view stats/visualizations
-- Processing is **idempotent** (no duplicate patents), reasonably fast (cached downloads), and resilient (retryable failures).
-- Core endpoints return correct data and the UI handles empty/running/failed/processed states cleanly.
+### Phase 4 — UX polish + feature hardening (optional)
+User stories
+1. As a user, I can download a processed journal PDF from the UI.
+2. As a user, I can see a job history list with statuses.
+3. As a user, I can export filtered patent results (CSV).
+4. As a user, I can quickly jump via a command palette to a patent by app number.
+5. As a user, the UI remains fast and readable with 500+ patents.
+
+Steps
+- Add journal PDF download links when available.
+- Add job history drawer + logs.
+- Add CSV export endpoint or client-side export.
+- Add command palette (shadcn Command) for search/jump.
+- Performance pass: memoization, virtualization if needed.
+
+## 3. Next Actions (immediate)
+1. Implement and run the Phase 1 POC smoke script to verify scraping/download/job/patent retrieval still works.
+2. Create new component file structure + move code out of `App.js` (no UI changes yet besides wiring).
+3. Remove all emojis and replace green styles with grayscale tokens (global pass), then refine component styles.
+4. Fix “International Classification” applicant bug (locate source: backend parse vs frontend mapping) and add a regression test.
+5. Run frontend testing agent + screenshot verification.
+
+## 4. Success Criteria
+- UI contains **no emojis** and **no non-grayscale colors** (including borders, badges, focus, progress, map).
+- `App.js` reduced to a thin composition layer; core logic moved to hook/components.
+- React hook dependency warnings eliminated; stable keys used for lists; no silent catch blocks.
+- Applicants list is semantically correct; IPC appears only in metadata.
+- Core workflow works reliably: empty DB → user triggers download → job progresses → patents populate → detail drawer renders correctly.

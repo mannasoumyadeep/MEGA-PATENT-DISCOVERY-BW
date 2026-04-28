@@ -1,668 +1,201 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import * as d3 from "d3";
-import WelcomeModal from "./WelcomeModal";
-import "./App.css";
-
-const API = process.env.REACT_APP_BACKEND_URL || "";
-
-const FIELD_PALETTE = {
-  "Computing/AI":"#2563eb","Medical/Veterinary":"#16a34a","Chemistry & Metallurgy":"#d97706",
-  "Organic Chemistry":"#7c3aed","Biochemistry/Microbiology":"#0891b2","Electric Power":"#ea580c",
-  "Communications":"#db2777","Mechanical Engineering":"#64748b","Agriculture":"#65a30d",
-  "Physics":"#9333ea","ICT Applications":"#0284c7","Measuring/Testing":"#b45309",
-  "Basic Electric Elements":"#c2410c","Nano-Technology":"#7e22ce","Polymers":"#0f766e",
-  "Petroleum/Fuels":"#78350f","Human Necessities":"#15803d","Performing Operations":"#0369a1",
-  "Textiles & Paper":"#be185d","Unknown":"#d1d5db",
-};
-
-const CITY_COORDS = {
-  "Mumbai":[72.877,19.076],"New Delhi":[77.209,28.613],"Bengaluru":[77.594,12.971],
-  "Chennai":[80.270,13.082],"Hyderabad":[78.486,17.385],"Pune":[73.856,18.520],
-  "Kolkata":[88.363,22.572],"Ahmedabad":[72.571,23.022],"Nagpur":[79.088,21.145],
-  "Mangaluru":[74.856,12.914],"Coimbatore":[76.955,11.016],"Jaipur":[75.787,26.912],
-  "Kochi":[76.267,9.931],"Chandigarh":[76.779,30.733],"Lucknow":[80.946,26.846],
-  "Visakhapatnam":[83.299,17.686],"Indore":[75.857,22.719],"Bhubaneswar":[85.824,20.296],
-  "Vadodara":[73.200,22.307],"Gurugram":[77.026,28.459],"Noida":[77.391,28.535],
-  "Mysuru":[76.655,12.295],"Bhopal":[77.402,23.259],"Patna":[85.144,25.594],
-};
-
-function DENSITY_GREEN(intensity) {
-  const shades = [
-    "#f0fdf4", "#dcfce7", "#bbf7d0", "#86efac", "#4ade80", 
-    "#22c55e", "#16a34a", "#15803d", "#166534", "#14532d"
-  ];
-  const idx = Math.min(Math.floor(intensity * 10), 9);
-  return shades[idx];
-}
-
-function getMegaBadge(score) {
-  if (score >= 85) return { label: "ULTRA", color: "#dc2626" };
-  if (score >= 75) return { label: "MEGA+", color: "#ea580c" };
-  if (score >= 65) return { label: "MEGA", color: "#16a34a" };
-  return null;
-}
-
-function logError(context, error) {
-  if (process.env.NODE_ENV === 'development') {
-    console.error(`[${context}]`, error);
-  }
-  // In production: send to error tracking service
-}
-
-// Separate components to reduce complexity
-function IndiaMap({ patents, selectedCity, onCityClick }) {
-  const [states, setStates] = useState([]);
-  const [proj, setProj] = useState(null);
-
-  const cityStats = useMemo(() => {
-    const stats = {};
-    patents.forEach(p => {
-      const c = p.city;
-      if (!c) return;
-      if (!stats[c]) stats[c] = { total:0, mega:0 };
-      stats[c].total++;
-      if (p.mega_score >= 65) stats[c].mega++;
-    });
-    return stats;
-  }, [patents]);
-
-  const maxCount = useMemo(() => Math.max(...Object.values(cityStats).map(s=>s.total), 1), [cityStats]);
-  
-  const getCircleRadius = useCallback((count) => {
-    return 6 + (count/maxCount)*20;
-  }, [maxCount]);
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const loadMap = async () => {
-      try {
-        // Load topojson if needed
-        if (!window.topojson) {
-          await new Promise((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js";
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-          });
-        }
-        
-        // Load better India map
-        const response = await fetch("https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson");
-        const indiaGeo = await response.json();
-        
-        if (!isMounted) return;
-        
-        const projection = d3.geoMercator().fitSize([420, 520], indiaGeo);
-        setProj(() => projection);
-        
-        const pathGen = d3.geoPath().projection(projection);
-        const statePaths = indiaGeo.features.map(f => ({
-          path: pathGen(f),
-          name: f.properties.st_nm
-        }));
-        setStates(statePaths);
-      } catch (error) {
-        logError('IndiaMap', error);
-      }
-    };
-    
-    loadMap();
-    return () => { isMounted = false; };
-  }, []); // Empty deps - only load once
-
-  return (
-    <svg width={420} height={520} style={{display:"block"}}>
-      <rect x={0} y={0} width={420} height={520} fill="#fafafa"/>
-      {states.length > 0 ? (
-        states.map((s, i) => (
-          <path key={`state-${s.name}-${i}`} d={s.path} fill="#e8f5e9" stroke="#66bb6a" strokeWidth={0.5} />
-        ))
-      ) : (
-        <rect x={30} y={30} width={360} height={460} rx={6} fill="#e8f5e9" stroke="#66bb6a" strokeDasharray="8,4"/>
-      )}
-      {proj && Object.entries(CITY_COORDS).map(([city,[lng,lat]])=>{
-        const stat = cityStats[city];
-        if (!stat) return null;
-        
-        const [cx,cy] = proj([lng,lat]);
-        const r = getCircleRadius(stat.total);
-        const megaPct = stat.mega / stat.total;
-        const col = megaPct > 0.2 ? "#16a34a" : megaPct > 0.1 ? "#4ade80" : "#86efac";
-        const isSel = selectedCity === city;
-        
-        return (
-          <g key={`city-${city}`} style={{cursor:"pointer"}} onClick={()=>onCityClick(city)}>
-            {isSel && <circle cx={cx} cy={cy} r={r+8} fill="none" stroke={col} strokeWidth={2} opacity={0.4}/>}
-            <circle cx={cx} cy={cy} r={r+2} fill={col} opacity={0.2}/>
-            <circle cx={cx} cy={cy} r={r} fill={col} opacity={isSel?1:0.75} stroke="#fff" strokeWidth={2}/>
-            {stat.total>=3 && (
-              <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle" fill="#fff"
-                fontSize={r>14?10:8} fontFamily="JetBrains Mono,monospace" fontWeight="700">
-                {stat.total}
-              </text>
-            )}
-            <text x={cx+r+6} y={cy+2} dominantBaseline="middle"
-              fill={isSel?"#111":"#666"} fontSize={10} fontFamily="DM Sans,sans-serif"
-              fontWeight={isSel?"600":"400"}>
-              {city}
-            </text>
-            {stat.mega>0 && (
-              <text x={cx+r+6} y={cy+14} fontSize={8} fill="#16a34a" fontFamily="JetBrains Mono">
-                {stat.mega} MEGA
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function UploadModal({ journalNo, onClose, onUploadStart }) {
-  const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef();
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.pdf'));
-    setFiles(prev => [...prev, ...droppedFiles]);
-  }, []);
-
-  const handleFileSelect = useCallback((e) => {
-    const selectedFiles = Array.from(e.target.files).filter(f => f.name.endsWith('.pdf'));
-    setFiles(prev => [...prev, ...selectedFiles]);
-  }, []);
-
-  const removeFile = useCallback((index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleUpload = useCallback(async () => {
-    if (files.length === 0) return;
-    setUploading(true);
-
-    const formData = new FormData();
-    formData.append('journal_no', journalNo);
-    files.forEach(file => formData.append('files', file));
-
-    try {
-      const res = await fetch(`${API}/api/journals/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (!res.ok) throw new Error('Upload failed');
-      
-      const data = await res.json();
-      onUploadStart(data.job_id);
-      onClose();
-    } catch (error) {
-      logError('UploadModal', error);
-      alert('Upload failed: ' + error.message);
-    } finally {
-      setUploading(false);
-    }
-  }, [files, journalNo, onUploadStart, onClose]);
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="upload-modal" onClick={e => e.stopPropagation()}>
-        <div className="upload-header">
-          <h2>Upload PDFs for Journal {journalNo}</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
-        </div>
-        
-        <div className="upload-dropzone"
-          onDrop={handleDrop}
-          onDragOver={e => e.preventDefault()}
-          onClick={() => fileInputRef.current?.click()}>
-          <div className="dropzone-icon">📄</div>
-          <p>Drop PDF files here or click to browse</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf"
-            style={{display:'none'}}
-            onChange={handleFileSelect}
-          />
-        </div>
-
-        {files.length > 0 && (
-          <div className="upload-files">
-            <h3>{files.length} file(s) selected:</h3>
-            <ul>
-              {files.map((f, i) => (
-                <li key={`${f.name}-${f.size}-${i}`}>
-                  {f.name} ({(f.size / 1024 / 1024).toFixed(1)} MB)
-                  <button onClick={() => removeFile(i)}>✕</button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="upload-footer">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={handleUpload} disabled={uploading || files.length === 0}>
-            {uploading ? 'Uploading...' : `Upload ${files.length} PDF(s)`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useState, useCallback } from 'react';
+import { useDashboardData } from './hooks/useDashboardData';
+import { MetricsBar } from './components/dashboard/MetricsBar';
+import { JournalsPanel } from './components/dashboard/JournalsPanel';
+import { MapPanel } from './components/dashboard/MapPanel';
+import { PatentsPanel } from './components/dashboard/PatentsPanel';
+import { PatentDetailDrawer } from './components/dashboard/PatentDetailDrawer';
+import WelcomeDialog from './components/modals/WelcomeDialog';
+import UploadDialog from './components/modals/UploadDialog';
+import './App.css';
 
 export default function MegaPatentApp() {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [journals, setJournals] = useState([]);
-  const [patents, setPatents] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [jobs, setJobs] = useState({});
-  const [activeJournal, setActiveJournal] = useState(null);
-  const [selectedCity, setSelectedCity] = useState(null);
-  const [focusField, setFocusField] = useState("All");
-  const [megaOnly, setMegaOnly] = useState(true);
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("mega_score");
   const [selectedPatent, setSelectedPatent] = useState(null);
   const [uploadModal, setUploadModal] = useState(null);
 
-  // Load journals
-  const loadJournals = useCallback(async (refresh = false) => {
-    setLoading(true);
-    try {
-      const url = `${API}/api/journals${refresh?"?refresh=1":""}`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('Failed to fetch journals');
-      
-      const d = await r.json();
-      const sorted = (d.journals||[]).sort((a,b)=>{
-        if(a.journal_no==="UPCOMING")return -1;
-        if(b.journal_no==="UPCOMING")return 1;
-        const dateA = a.pub_date.split("/").reverse().join("");
-        const dateB = b.pub_date.split("/").reverse().join("");
-        return dateB.localeCompare(dateA);
-      });
-      setJournals(sorted);
-    } catch(error) {
-      logError('loadJournals', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    journals,
+    patents,
+    stats,
+    loading,
+    jobs,
+    activeJournal,
+    selectedCity,
+    focusField,
+    megaOnly,
+    search,
+    sortBy,
+    fieldCounts,
+    setActiveJournal,
+    setSelectedCity,
+    setFocusField,
+    setMegaOnly,
+    setSearch,
+    setSortBy,
+    setJobs,
+    loadJournals,
+    startDownload,
+    clearFilters,
+  } = useDashboardData();
 
-  // Load patents
-  const loadPatents = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({limit:"500",sort:sortBy});
-      if(activeJournal) params.set("journal_no",activeJournal);
-      if(focusField && focusField!=="All") params.set("field",focusField);
-      if(selectedCity) params.set("city",selectedCity);
-      if(search) params.set("search",search);
-      if(megaOnly) params.set("mega_only","1");
-      
-      const url = `${API}/api/patents?${params}`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('Failed to fetch patents');
-      
-      const d = await r.json();
-      setPatents(d.patents||[]);
-    } catch(error) {
-      logError('loadPatents', error);
-    }
-  }, [activeJournal, focusField, selectedCity, search, sortBy, megaOnly]);
+  const toggleJournal = useCallback(
+    (jno) => {
+      setActiveJournal((prev) => (prev === jno ? null : jno));
+    },
+    [setActiveJournal]
+  );
 
-  // Load stats
-  const loadStats = useCallback(async () => {
-    try {
-      const url = `${API}/api/stats${activeJournal?`?journal_no=${activeJournal}`:""}`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('Failed to fetch stats');
-      
-      const d = await r.json();
-      setStats(d);
-    } catch(error) {
-      logError('loadStats', error);
-    }
-  }, [activeJournal]);
+  const toggleCity = useCallback(
+    (city) => {
+      setSelectedCity((prev) => (prev === city ? null : city));
+    },
+    [setSelectedCity]
+  );
 
-  // Initial load
-  useEffect(() => {
-    loadJournals();
-  }, [loadJournals]);
-
-  useEffect(() => {
-    loadPatents();
-  }, [loadPatents]);
-
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
-  // Job polling
-  useEffect(() => {
-    const running = Object.values(jobs).filter(j=>j.status==="running");
-    if (!running.length) return;
-    
-    const pollJobs = async () => {
-      for (const job of running) {
-        try {
-          const r = await fetch(`${API}/api/jobs/${job.job_id}`);
-          if (!r.ok) continue;
-          
-          const d = await r.json();
-          setJobs(prev => ({...prev, [job.journal_no]: d}));
-          
-          if (d.status==="complete") {
-            loadJournals();
-            loadPatents();
-            loadStats();
-          }
-        } catch(error) {
-          logError('pollJobs', error);
-        }
-      }
-    };
-    
-    const id = setInterval(pollJobs, 2000);
-    return () => clearInterval(id);
-  }, [jobs, loadJournals, loadPatents, loadStats]);
-
-  const startDownload = useCallback(async (journal_no) => {
-    try {
-      const r = await fetch(`${API}/api/journals/download`, {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({journal_no}),
-      });
-      
-      if (!r.ok) throw new Error('Download failed');
-      
-      const d = await r.json();
-      setJobs(prev => ({...prev, [journal_no]: {...d, status:"running", progress:0}}));
-    } catch(error) {
-      logError('startDownload', error);
-      alert("Download failed: "+ error.message);
-    }
-  }, []);
-
-  const fieldCounts = useMemo(()=>{
-    const c={};
-    patents.forEach(p=>{c[p.field]=(c[p.field]||0)+1;});
-    return c;
-  },[patents]);
-
-  const maxFieldCount = Math.max(...Object.values(fieldCounts), 1);
-  const sortedFields = Object.keys(FIELD_PALETTE).filter(f=>fieldCounts[f]>0).sort((a,b)=>(fieldCounts[b]||0)-(fieldCounts[a]||0));
-
-  const clearFilters = useCallback(() => {
-    setSelectedCity(null);
-    setFocusField("All");
-    setSearch("");
-  }, []);
-
-  const toggleJournal = useCallback((jno) => {
-    setActiveJournal(prev => prev === jno ? null : jno);
-  }, []);
-
-  const toggleCity = useCallback((city) => {
-    setSelectedCity(prev => prev === city ? null : city);
-  }, []);
-
-  const toggleField = useCallback((field) => {
-    setFocusField(prev => prev === field ? "All" : field);
-  }, []);
+  const toggleField = useCallback(
+    (field) => {
+      setFocusField((prev) => (prev === field ? 'All' : field));
+    },
+    [setFocusField]
+  );
 
   const togglePatent = useCallback((patent) => {
-    setSelectedPatent(prev => prev?.id === patent.id ? null : patent);
+    setSelectedPatent((prev) => (prev?.id === patent.id ? null : patent));
   }, []);
 
-  const handleUploadStart = useCallback((jobId) => {
-    setJobs(prev => ({...prev, [uploadModal]: {job_id:jobId, status:"running", progress:0}}));
-  }, [uploadModal]);
+  const handleUploadStart = useCallback(
+    (jobId) => {
+      setJobs((prev) => ({ ...prev, [uploadModal]: { job_id: jobId, status: 'running', progress: 0 } }));
+    },
+    [uploadModal, setJobs]
+  );
 
   return (
     <>
-      {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
+      {showWelcome && <WelcomeDialog onClose={() => setShowWelcome(false)} />}
       {uploadModal && (
-        <UploadModal
-          journalNo={uploadModal}
-          onClose={() => setUploadModal(null)}
-          onUploadStart={handleUploadStart}
-        />
+        <UploadDialog journalNo={uploadModal} onClose={() => setUploadModal(null)} onUploadStart={handleUploadStart} />
       )}
 
-      <div style={{height:"100vh",display:"flex",flexDirection:"column",background:"#fff"}}>
-        <header style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:64,borderBottom:"2px solid #16a34a",flexShrink:0,background:"linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"}}>
-          <div style={{display:"flex",alignItems:"baseline",gap:16}}>
-            <span style={{fontFamily:"'Libre Baskerville',serif",fontSize:22,fontWeight:700,color:"#15803d"}}>🔍 MEGA Patent Discovery</span>
-            <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#16a34a",letterSpacing:"0.1em",textTransform:"uppercase"}}>
-              {activeJournal ? `Journal ${activeJournal}` : "All Journals"}
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0 24px',
+            height: 64,
+            borderBottom: '2px solid #111',
+            flexShrink: 0,
+            background: '#ffffff',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+            <span style={{ fontFamily: "'Libre Baskerville', serif", fontSize: 22, fontWeight: 700, color: '#111' }}>
+              MEGA Patent Discovery
+            </span>
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 9,
+                color: '#5a5a5a',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {activeJournal ? `Journal ${activeJournal}` : 'All Journals'}
             </span>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:12}}>
-            {(selectedCity || focusField!=="All" || search) && (
-              <button className="btn" onClick={clearFilters}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {(selectedCity || focusField !== 'All' || search) && (
+              <button className="btn" onClick={clearFilters} data-testid="clear-filters-button">
                 ✕ Clear Filters
               </button>
             )}
-            <label style={{display:"flex",alignItems:"center",gap:8,fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#15803d",cursor:"pointer"}}>
-              <input type="checkbox" checked={megaOnly} onChange={e=>setMegaOnly(e.target.checked)} />
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11,
+                color: '#111',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={megaOnly}
+                onChange={(e) => setMegaOnly(e.target.checked)}
+                data-testid="mega-only-checkbox"
+              />
               MEGA Only
             </label>
           </div>
         </header>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",borderBottom:"1px solid #e5e5e5",flexShrink:0}}>
-          {[
-            {n:stats?.overview?.total||patents.length,label:"Total Patents",sub:activeJournal||"all journals",color:"#111"},
-            {n:stats?.overview?.mega_patents||patents.filter(p=>p.mega_score>=65).length,label:"MEGA Patents",sub:"score ≥ 65",color:"#16a34a",bg:"#f0fdf4"},
-            {n:Math.round(stats?.overview?.avg_mega_score||0),label:"Avg Score",sub:"0-100 scale",color:"#15803d"},
-            {n:stats?.overview?.cities||new Set(patents.map(p=>p.city).filter(Boolean)).size,label:"Cities",sub:"innovation hubs",color:"#111"},
-            {n:Math.round(stats?.overview?.avg_claims||0),label:"Avg Claims",sub:"per patent",color:"#111"},
-          ].map((s,i)=>(
-            <div key={`stat-${s.label}`} style={{padding:"16px 20px",borderRight:i<4?"1px solid #e5e5e5":"none",background:s.bg||"transparent"}}>
-              <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:26,fontWeight:700,color:s.color,lineHeight:1}}>
-                {loading?"…":s.n}
-              </div>
-              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:s.color==="#16a34a"?"#15803d":"#999",letterSpacing:"0.08em",textTransform:"uppercase",marginTop:4}}>{s.label}</div>
-              <div style={{fontSize:10,color:"#ccc",marginTop:2}}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
+        <MetricsBar stats={stats} patents={patents} activeJournal={activeJournal} loading={loading} />
 
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          {/* Left Panel - Journals */}
-          <div style={{width:210,flexShrink:0,borderRight:"1px solid #e5e5e5",display:"flex",flexDirection:"column"}}>
-            <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#999"}}>IPO Journals</span>
-              <button className="btn" onClick={()=>loadJournals(true)} disabled={loading}>
-                {loading?"⟳":"↻"} Refresh
-              </button>
-            </div>
-            <div style={{flex:1,overflowY:"auto"}}>
-              {journals.map(j=>{
-                const job=jobs[j.journal_no];
-                const isActive=activeJournal===j.journal_no;
-                const isRunning=job&&job.status==="running";
-                const isProcessed = j.status==="processed";
-                
-                return(
-                  <div key={j.journal_no}
-                    className={`journal-row${isActive?" sel":""}`}
-                    onClick={()=>isProcessed && toggleJournal(j.journal_no)}
-                    style={{cursor:isProcessed?"pointer":"default"}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:isProcessed?"#16a34a":j.status==="upcoming"?"#6366f1":"#d1d5db",flexShrink:0}}/>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:600,fontSize:10,color:isActive?"#fff":"#333"}}>No. {j.journal_no}</div>
-                      <div style={{fontSize:9,color:isActive?"#aaa":"#999",marginTop:1}}>{j.pub_date}</div>
-                      {j.mega_patents_count>0&&<div style={{fontSize:8,color:isActive?"#4ade80":"#16a34a",marginTop:2}}>{j.mega_patents_count} MEGA</div>}
-                    </div>
-                    {isRunning?(
-                      <div style={{textAlign:"right",minWidth:50}}>
-                        <div style={{fontSize:9,color:"#d97706",marginBottom:2}}>{job.progress||0}%</div>
-                        <div className="progress-bar" style={{width:50,height:3}}>
-                          <div className="progress-fill" style={{width:`${job.progress||0}%`,background:"#16a34a"}}/>
-                        </div>
-                      </div>
-                    ):j.status!=="processed" && j.status!=="upcoming"?(
-                      <div style={{display:"flex",gap:4}}>
-                        <button className="btn-mini primary" onClick={e=>{e.stopPropagation();startDownload(j.journal_no);}}>
-                          ↓
-                        </button>
-                        <button className="btn-mini" onClick={e=>{e.stopPropagation();setUploadModal(j.journal_no);}}>
-                          📤
-                        </button>
-                      </div>
-                    ):null}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <JournalsPanel
+            journals={journals}
+            activeJournal={activeJournal}
+            jobs={jobs}
+            loading={loading}
+            onToggleJournal={toggleJournal}
+            onStartDownload={startDownload}
+            onUploadClick={setUploadModal}
+            onRefresh={loadJournals}
+          />
 
-          {/* Center Panel - Map & Heatmap */}
-          <div style={{width:450,flexShrink:0,borderRight:"1px solid #e5e5e5",display:"flex",flexDirection:"column"}}>
-            <div style={{padding:"12px 16px",borderBottom:"1px solid #f0f0f0"}}>
-              <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#999"}}>Innovation Map</span>
-            </div>
-            <div style={{flex:1,overflowY:"auto",display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
-              <IndiaMap patents={patents} selectedCity={selectedCity} onCityClick={toggleCity} />
-            </div>
-            <div style={{borderTop:"1px solid #f0f0f0",padding:"12px 16px",maxHeight:"35%",overflowY:"auto"}}>
-              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#999",marginBottom:10}}>Technology Density</div>
-              {sortedFields.slice(0,12).map(field=>{
-                const n=fieldCounts[field]||0;
-                const intensity=n/maxFieldCount;
-                const greenShade=DENSITY_GREEN(intensity);
-                const isOn=focusField===field;
-                return(
-                  <div key={field} className="field-row" onClick={()=>toggleField(field)}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:greenShade,border:`1px solid ${isOn?"#16a34a":"#86efac"}`,flexShrink:0}}/>
-                    <div style={{flex:1,fontSize:10,fontWeight:isOn?600:400,color:isOn?"#111":"#666"}}>{field}</div>
-                    <div style={{width:50,background:"#f0f0f0",height:4,borderRadius:2}}>
-                      <div style={{height:"100%",width:`${(n/maxFieldCount)*100}%`,background:greenShade,borderRadius:2}}/>
-                    </div>
-                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#999",width:20,textAlign:"right"}}>{n}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <MapPanel
+            patents={patents}
+            selectedCity={selectedCity}
+            fieldCounts={fieldCounts}
+            focusField={focusField}
+            onCityClick={toggleCity}
+            onFieldClick={toggleField}
+          />
 
-          {/* Right Panel - Patents */}
-          <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
-            <div style={{padding:"10px 20px",borderBottom:"1px solid #f0f0f0",display:"flex",gap:12,alignItems:"center"}}>
-              <input className="search-box" placeholder="Search patents..." value={search} onChange={e=>setSearch(e.target.value)} style={{flex:1}}/>
-              <select onChange={e=>setSortBy(e.target.value)} value={sortBy} className="select-box">
-                <option value="mega_score">MEGA Score ↓</option>
-                <option value="num_claims">Claims ↓</option>
-                <option value="num_pages">Pages ↓</option>
-                <option value="filing_date">Date ↓</option>
-              </select>
-            </div>
-            <div style={{padding:"8px 20px",borderBottom:"1px solid #f8f8f8",fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#999",letterSpacing:"0.07em"}}>
-              {patents.length} RESULT{patents.length!==1?"S":""}
-              {selectedCity?` · ${selectedCity}`:""}
-              {focusField!=="All"?` · ${focusField}`:""}
-              {megaOnly?" · MEGA ONLY":""}
-            </div>
-            <div style={{flex:1,overflowY:"auto"}}>
-              {patents.length===0?(
-                <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:200,color:"#ccc"}}>
-                  {loading?"Loading...":"No patents found"}
-                </div>
-              ):patents.map((p)=>{
-                const badge=getMegaBadge(p.mega_score);
-                const isSel=selectedPatent?.id===p.id;
-                return(
-                  <div key={p.id || p.application_no} className={`patent-card${isSel?" sel":""}`} onClick={()=>togglePatent(p)}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                          <span className="field-pill" style={{background:FIELD_PALETTE[p.field]||"#999"}}>{p.field}</span>
-                          {badge&&<span className="mega-badge" style={{background:badge.color}}>{badge.label}</span>}
-                        </div>
-                        <div style={{fontSize:13,fontWeight:500,lineHeight:1.5,marginBottom:8,color:isSel?"#fff":"#111"}}>{p.title}</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",fontSize:10,color:isSel?"#aaa":"#999"}}>
-                          {p.city&&<span>📍 {p.city}</span>}
-                          {p.applicants?.[0]&&<span>👤 {p.applicants[0]}</span>}
-                          {p.ipc_codes?.[0]&&<span>🏷️ {p.ipc_codes[0]}</span>}
-                        </div>
-                        <div style={{marginTop:6,fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:isSel?"#666":"#ccc"}}>
-                          {p.application_no} · {p.filing_date}
-                        </div>
-                      </div>
-                      <div style={{textAlign:"center",minWidth:70}}>
-                        <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:28,fontWeight:700,color:badge?badge.color:isSel?"#fff":"#111",lineHeight:1}}>{p.mega_score}</div>
-                        <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:isSel?"#666":"#999",letterSpacing:"0.05em",textTransform:"uppercase",marginTop:2}}>SCORE</div>
-                        <div style={{fontSize:10,color:isSel?"#888":"#ccc",marginTop:6}}>{Math.round(p.num_claims||0)}c · {p.num_pages}p</div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <PatentsPanel
+            patents={patents}
+            loading={loading}
+            search={search}
+            sortBy={sortBy}
+            selectedCity={selectedCity}
+            focusField={focusField}
+            megaOnly={megaOnly}
+            onSearchChange={setSearch}
+            onSortChange={setSortBy}
+            onPatentClick={togglePatent}
+            selectedPatent={selectedPatent}
+          />
         </div>
       </div>
 
-      {/* Detail Panel */}
-      <div className={`slide-panel${selectedPatent?" open":""}` }>
-        {selectedPatent&&(()=>{
-          const badge=getMegaBadge(selectedPatent.mega_score);
-          return(
-            <div style={{padding:"28px 36px",maxWidth:1000,margin:"0 auto"}}>
-              <button onClick={()=>setSelectedPatent(null)} className="panel-close">✕</button>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:32}}>
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-                    <span className="field-pill" style={{background:FIELD_PALETTE[selectedPatent.field]||"#999"}}>{selectedPatent.field}</span>
-                    {badge&&<span className="mega-badge" style={{background:badge.color,fontSize:12}}>{badge.label}</span>}
-                    <div style={{marginLeft:"auto",textAlign:"center"}}>
-                      <div style={{fontFamily:"'Libre Baskerville',serif",fontSize:32,fontWeight:700,color:badge?badge.color:"#4ade80",lineHeight:1}}>{selectedPatent.mega_score}</div>
-                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#666",letterSpacing:"0.06em"}}>MEGA SCORE</div>
-                    </div>
-                  </div>
-                  <h2 style={{fontFamily:"'Libre Baskerville',serif",fontSize:18,fontWeight:700,lineHeight:1.5,color:"#fff",marginBottom:16}}>{selectedPatent.title}</h2>
-                  <p style={{fontSize:13,lineHeight:1.8,color:"#999",marginBottom:20}}>{selectedPatent.abstract||"No abstract available."}</p>
-                  {selectedPatent.applicants?.length>0&&(
-                    <div style={{marginBottom:16}}>
-                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#666",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>Applicants</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                        {selectedPatent.applicants.map((a,i)=>(<span key={`${a}-${i}`} style={{fontSize:11,background:"#1a1a1a",padding:"4px 10px",borderRadius:3,color:"#aaa"}}>{a}</span>))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:14}}>
-                  {[
-                    ["Application No.",selectedPatent.application_no],
-                    ["Filing Date",selectedPatent.filing_date],
-                    ["Published",selectedPatent.publication_date],
-                    ["Claims",Math.round(selectedPatent.num_claims||0)],
-                    ["Pages",selectedPatent.num_pages],
-                    ["IPC Codes",selectedPatent.ipc_codes?.slice(0,3).join(", ")||"-"],
-                    ["City",selectedPatent.city||"Unknown"],
-                    ["State",selectedPatent.state||"Unknown"],
-                    ["Journal",selectedPatent.journal_no],
-                    ["Type",selectedPatent.pub_type],
-                  ].map(([label,val])=>(
-                    <div key={label}>
-                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:8,color:"#666",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{label}</div>
-                      <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#ddd",lineHeight:1.4}}>{val||"—"}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+      <PatentDetailDrawer patent={selectedPatent} onClose={() => setSelectedPatent(null)} />
+
+      {/* Made with Emergent badge */}
+      <div
+        data-testid="made-with-emergent-badge"
+        style={{
+          position: 'fixed',
+          bottom: 16,
+          left: 16,
+          zIndex: 40,
+          borderRadius: 4,
+          border: '1px solid #dedede',
+          background: '#ffffff',
+          padding: '6px 10px',
+          fontSize: 10,
+          fontFamily: "'JetBrains Mono', monospace",
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: '#5a5a5a',
+        }}
+      >
+        Made with Emergent
       </div>
     </>
   );

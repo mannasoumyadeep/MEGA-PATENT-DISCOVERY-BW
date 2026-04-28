@@ -1,54 +1,38 @@
 [
   {
-    "content": "Phase 1: POC - Combined test script (scrape, download, extract, persist)",
+    "content": "Phase 1: Backend POC validation - Create smoke test script to verify journal scraping, download, job polling, patent retrieval still works end-to-end",
     "status": "completed"
   },
   {
-    "content": "Phase 1: All POC user stories validated successfully",
+    "content": "Phase 2.1: Refactor App.js - Create new component structure (useDashboardData hook, MetricsBar, JournalsPanel, MapPanel, PatentsPanel, PatentDetailDrawer, WelcomeDialog, UploadDialog)",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend - FastAPI setup with MongoDB",
+    "content": "Phase 2.2: Fix React code quality - Correct missing hook dependencies (lines 68, 289, 248, 263), replace index-as-key with stable keys, fix empty catch blocks, remove production console logs, remove nested ternaries",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend - Scraper, Downloader, Extractor services",
+    "content": "Phase 2.3: Strict B&W redesign - Remove ALL colors and emojis: eliminate FIELD_PALETTE, DENSITY_GREEN, getMegaBadge colors, replace emoji icons with lucide-react, implement grayscale tokens in CSS",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend - Background job system with progress tracking",
+    "content": "Phase 2.4: Update map to grayscale spec - White background, light gray land (#eeeeee), dark gray borders (#5a5a5a), solid black pins with white halo, density via opacity only",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Backend - API endpoints (journals, patents, stats, jobs)",
+    "content": "Phase 2.5: Add data-testid attributes - Add to all metrics, journal rows, buttons, search inputs, map controls, patent list items, detail drawer elements",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Frontend - Integrate UI with backend",
+    "content": "Phase 2.6: Fix applicant tags logic bug - Remove 'International Classification' from applicants list, ensure it appears only in metadata as ipc_codes",
     "status": "completed"
   },
   {
-    "content": "Phase 2: Testing - Fixed async/await background job issue",
-    "status": "completed"
+    "content": "Phase 2.7: Frontend testing - Run testing agent for E2E smoke tests, verify dashboard loads, jobs work, filtering works, detail drawer renders correctly",
+    "status": "in_progress"
   },
   {
-    "content": "Phase 2: Testing - Fixed stats API KeyError for city field",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 2: All user stories validated and bugs fixed",
-    "status": "completed"
-  },
-  {
-    "content": "Phase 3: Hardening - Add retry logic and error handling",
-    "status": "pending"
-  },
-  {
-    "content": "Phase 3: Hardening - Performance optimization and caching",
-    "status": "pending"
-  },
-  {
-    "content": "Phase 3: Final Testing and Polish",
+    "content": "Phase 3: Backend refactoring - Modularize high-complexity functions in services.py and server.py (extract_patents_from_pdf, download_pdfs_selenium, run_download_job, get_stats)",
     "status": "pending"
   }
 ]

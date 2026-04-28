@@ -354,7 +354,8 @@ def extract_patents_from_pdf(pdf_path: str, journal_no: str) -> List[Dict]:
                     parts = re.split(r"\d+\)\s*", app_text)
                     for part in parts[1:]:
                         name = " ".join(part.split("\n")[0].split()).strip()
-                        if len(name) > 3:
+                        # Filter out classification text and other metadata
+                        if len(name) > 3 and not re.search(r"(?:international\s+)?classification", name, re.IGNORECASE):
                             applicants.append(name)
                 
                 # Extract address for city/state

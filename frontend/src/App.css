@@ -5,31 +5,31 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
 
 ::-webkit-scrollbar{width:6px;height:6px;}
 ::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:#d0d0d0;border-radius:3px;}
-::-webkit-scrollbar-thumb:hover{background:#b0b0b0;}
+::-webkit-scrollbar-thumb{background:#cfcfcf;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#9a9a9a;}
 
 .journal-row{
   display:flex;
   align-items:center;
   gap:10px;
   padding:10px 16px;
-  border-bottom:1px solid #f5f5f5;
-  transition:background 0.12s;
+  border-bottom:1px solid #f6f6f6;
+  transition:background-color 0.12s;
   font-family:'JetBrains Mono',monospace;
   font-size:10px;
 }
-.journal-row:hover{background:#fafafa;}
-.journal-row.sel{background:#16a34a;color:#fff;}
+.journal-row:hover{background:#f6f6f6;}
+.journal-row.sel{background:#111;color:#fff;}
 
 .patent-card{
-  border-bottom:1px solid #f2f2f2;
+  border-bottom:1px solid #eeeeee;
   padding:16px 20px;
   cursor:pointer;
-  transition:all 0.15s;
+  transition:background-color 0.15s, color 0.15s;
   position:relative;
   animation:fadeUp 0.3s ease both;
 }
-.patent-card:hover{background:#fafafa;}
+.patent-card:hover{background:#f6f6f6;}
 .patent-card.sel{background:#111;color:#fff;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
@@ -44,7 +44,6 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   text-transform:uppercase;
   font-weight:600;
   border-radius:3px;
-  color:#fff;
 }
 
 .mega-badge{
@@ -55,19 +54,12 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   letter-spacing:0.08em;
   font-weight:700;
   border-radius:3px;
-  color:#fff;
-  animation:pulse 2s infinite;
-}
-
-@keyframes pulse{
-  0%,100%{opacity:1;}
-  50%{opacity:0.7;}
 }
 
 .search-box{
   width:100%;
   border:none;
-  border-bottom:2px solid #e5e5e5;
+  border-bottom:2px solid #dedede;
   padding:10px 0;
   font-family:'DM Sans',sans-serif;
   font-size:14px;
@@ -76,12 +68,12 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   color:#111;
   transition:border-color 0.2s;
 }
-.search-box::placeholder{color:#ccc;}
-.search-box:focus{border-color:#16a34a;}
+.search-box::placeholder{color:#cfcfcf;}
+.search-box:focus{border-color:#111;}
 
 .select-box{
   appearance:none;
-  border:1px solid #e5e5e5;
+  border:1px solid #dedede;
   background:#fff;
   padding:8px 32px 8px 12px;
   font-family:'JetBrains Mono',monospace;
@@ -90,14 +82,14 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   text-transform:uppercase;
   cursor:pointer;
   outline:none;
-  color:#666;
+  color:#5a5a5a;
   border-radius:4px;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a5a5a'/%3E%3C/svg%3E");
   background-repeat:no-repeat;
   background-position:right 10px center;
-  transition:all 0.15s;
+  transition:border-color 0.15s, color 0.15s;
 }
-.select-box:hover{border-color:#16a34a;}
+.select-box:hover{border-color:#111;color:#111;}
 
 .btn{
   padding:7px 16px;
@@ -107,15 +99,15 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   text-transform:uppercase;
   cursor:pointer;
   border-radius:4px;
-  transition:all 0.15s;
-  border:1px solid #e0e0e0;
+  transition:border-color 0.15s, background-color 0.15s, color 0.15s;
+  border:1px solid #dedede;
   background:#fff;
-  color:#666;
+  color:#5a5a5a;
   font-weight:500;
 }
-.btn:hover{border-color:#16a34a;color:#16a34a;}
-.btn.primary{background:#16a34a;color:#fff;border-color:#16a34a;}
-.btn.primary:hover{background:#15803d;}
+.btn:hover{border-color:#111;color:#111;}
+.btn.primary{background:#111;color:#fff;border-color:#111;}
+.btn.primary:hover{background:#000;}
 .btn:disabled{opacity:0.4;cursor:not-allowed;}
 
 .btn-mini{
@@ -123,25 +115,25 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   font-size:9px;
   font-family:'JetBrains Mono',monospace;
   cursor:pointer;
-  border:1px solid #e0e0e0;
+  border:1px solid #dedede;
   background:#fff;
   border-radius:3px;
-  transition:all 0.15s;
+  transition:border-color 0.15s, background-color 0.15s;
 }
-.btn-mini:hover{border-color:#16a34a;background:#f0fdf4;}
-.btn-mini.primary{background:#16a34a;color:#fff;border-color:#16a34a;}
-.btn-mini.primary:hover{background:#15803d;}
+.btn-mini:hover{border-color:#111;background:#f6f6f6;}
+.btn-mini.primary{background:#111;color:#fff;border-color:#111;}
+.btn-mini.primary:hover{background:#000;}
 .btn-mini:disabled{opacity:0.3;cursor:not-allowed;}
 
 .progress-bar{
   height:3px;
-  background:#e8e8e8;
+  background:#eeeeee;
   border-radius:2px;
   overflow:hidden;
 }
 .progress-fill{
   height:100%;
-  background:#16a34a;
+  background:#111;
   border-radius:2px;
   transition:width 0.4s ease;
 }
@@ -168,7 +160,7 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);
   max-height:60vh;
   overflow-y:auto;
-  border-top:2px solid #16a34a;
+  border-top:2px solid #111;
   box-shadow:0 -10px 40px rgba(0,0,0,0.3);
 }
 .slide-panel.open{transform:translateY(0);}
@@ -178,8 +170,8 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   top:20px;
   right:24px;
   background:none;
-  border:1px solid #333;
-  color:#999;
+  border:1px solid #3a3a3a;
+  color:#7a7a7a;
   width:30px;
   height:30px;
   cursor:pointer;
@@ -188,9 +180,9 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   justify-content:center;
   font-size:14px;
   border-radius:4px;
-  transition:all 0.2s;
+  transition:border-color 0.2s, color 0.2s;
 }
-.panel-close:hover{border-color:#16a34a;color:#16a34a;}
+.panel-close:hover{border-color:#dedede;color:#dedede;}
 
 .modal-overlay{
   position:fixed;
@@ -217,7 +209,7 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   align-items:center;
   justify-content:space-between;
   padding:20px 24px;
-  border-bottom:1px solid #e5e5e5;
+  border-bottom:1px solid #dedede;
 }
 
 .upload-header h2{
@@ -229,8 +221,8 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
 
 .close-btn{
   background:none;
-  border:1px solid #e0e0e0;
-  color:#999;
+  border:1px solid #dedede;
+  color:#7a7a7a;
   width:28px;
   height:28px;
   cursor:pointer;
@@ -239,47 +231,42 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   justify-content:center;
   font-size:14px;
   border-radius:4px;
-  transition:all 0.2s;
+  transition:border-color 0.2s, color 0.2s;
 }
-.close-btn:hover{border-color:#dc2626;color:#dc2626;}
+.close-btn:hover{border-color:#111;color:#111;}
 
 .upload-dropzone{
   margin:24px;
   padding:40px;
-  border:2px dashed #d0d0d0;
+  border:2px dashed #cfcfcf;
   border-radius:8px;
   text-align:center;
   cursor:pointer;
-  transition:all 0.2s;
-  background:#fafafa;
+  transition:border-color 0.2s, background-color 0.2s;
+  background:#f6f6f6;
 }
 .upload-dropzone:hover{
-  border-color:#16a34a;
-  background:#f0fdf4;
-}
-
-.dropzone-icon{
-  font-size:48px;
-  margin-bottom:12px;
+  border-color:#111;
+  background:#eeeeee;
 }
 
 .upload-dropzone p{
   font-family:'DM Sans',sans-serif;
   font-size:14px;
-  color:#666;
+  color:#5a5a5a;
 }
 
 .upload-files{
   margin:0 24px 24px;
   padding:16px;
-  background:#f8f8f8;
+  background:#f6f6f6;
   border-radius:6px;
 }
 
 .upload-files h3{
   font-family:'JetBrains Mono',monospace;
   font-size:11px;
-  color:#666;
+  color:#5a5a5a;
   margin-bottom:12px;
   text-transform:uppercase;
   letter-spacing:0.05em;
@@ -300,26 +287,26 @@ html,body,#root{height:100%;background:#fff;color:#111;font-family:'DM Sans',san
   margin-bottom:6px;
   font-family:'DM Sans',sans-serif;
   font-size:12px;
-  color:#333;
+  color:#111;
 }
 
 .upload-files li button{
   background:none;
   border:none;
-  color:#dc2626;
+  color:#111;
   cursor:pointer;
   font-size:14px;
   padding:4px;
   transition:opacity 0.2s;
 }
-.upload-files li button:hover{opacity:0.7;}
+.upload-files li button:hover{opacity:0.6;}
 
 .upload-footer{
   display:flex;
   gap:12px;
   justify-content:flex-end;
   padding:16px 24px;
-  border-top:1px solid #e5e5e5;
+  border-top:1px solid #dedede;
 }
 
 @keyframes slideUp{
