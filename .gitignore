@@ -88,3 +88,14 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Patent data files - too large for Git, uploaded via dashboard in production
+backend/data/downloads/*
+backend/data/uploads/*
+!backend/data/downloads/.gitkeep
+!backend/data/uploads/.gitkeep
+*.pdf
+
+# Local test scripts (contain credentials)
+test_atlas.py
+check_local.py
