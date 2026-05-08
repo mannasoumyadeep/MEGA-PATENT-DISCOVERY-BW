@@ -1,18 +1,16 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
 import { fmt, fmtDate } from '../utils/format';
 
-export default function Hero({ stats, latestJournal, onAboutClick, onBriefClick }) {
+export default function Hero({ stats, latestJournal }) {
   const totalPatents = stats?.total_patents ?? 0;
   const megaPatents = stats?.mega_patents ?? 0;
 
-  // Simple narrative line generated from real numbers
   const briefHeadline = totalPatents > 0
     ? `${fmt(megaPatents)} new MEGA-tier patents identified across India this period`
     : 'Awaiting first journal ingestion';
 
   const briefDate = latestJournal?.pub_date
-    ? fmtDate(latestJournal.pub_date) + ` (Journal ${latestJournal.journal_no})`
+    ? fmtDate(latestJournal.pub_date) + ` · Journal ${latestJournal.journal_no}`
     : 'No journal processed yet';
 
   return (
@@ -25,20 +23,16 @@ export default function Hero({ stats, latestJournal, onAboutClick, onBriefClick 
       <div className="hero-deck">
         <p className="hero-deck-text">
           MEGA Patent Discovery surfaces India's most impactful patent innovations —
-          evaluated, curated, and explained with editorial rigor. Built on the IP India
-          Patent Journal, scored on documentation depth, claim breadth, and applicant
+          evaluated and curated with editorial rigor. Built on the IP India Patent
+          Journal, scored on documentation depth, claim breadth, and applicant
           credibility.
         </p>
-        <span className="hero-deck-link" onClick={onAboutClick}>
-          About our editorial approach <ArrowRight size={12} strokeWidth={2} />
-        </span>
       </div>
 
       <div className="hero-brief">
-        <div className="hero-brief-label">Today's Intelligence Brief</div>
+        <div className="hero-brief-label">This Week's Brief</div>
         <div className="hero-brief-date">{briefDate}</div>
         <div className="hero-brief-headline">{briefHeadline}</div>
-        <span className="hero-brief-link" onClick={onBriefClick}>Read Brief →</span>
       </div>
     </section>
   );

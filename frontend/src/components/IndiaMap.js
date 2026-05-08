@@ -1,109 +1,110 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
-import { ArrowRight } from 'lucide-react';
 import { fmt } from '../utils/format';
 
-/**
- * India state names normalization map
- * (handles common spelling variants between IP India patents data
- *  and TopoJSON state names)
- */
 const STATE_ALIASES = {
-  'tamil nadu': 'Tamil Nadu',
-  'tamilnadu': 'Tamil Nadu',
-  'karnataka': 'Karnataka',
-  'maharashtra': 'Maharashtra',
-  'delhi': 'NCT of Delhi',
-  'new delhi': 'NCT of Delhi',
-  'telangana': 'Telangana',
-  'andhra pradesh': 'Andhra Pradesh',
-  'gujarat': 'Gujarat',
-  'west bengal': 'West Bengal',
-  'rajasthan': 'Rajasthan',
-  'kerala': 'Kerala',
-  'uttar pradesh': 'Uttar Pradesh',
-  'haryana': 'Haryana',
-  'punjab': 'Punjab',
-  'madhya pradesh': 'Madhya Pradesh',
-  'odisha': 'Odisha',
-  'orissa': 'Odisha',
-  'bihar': 'Bihar',
-  'jharkhand': 'Jharkhand',
-  'chhattisgarh': 'Chhattisgarh',
-  'assam': 'Assam',
+  'tamil nadu': 'Tamil Nadu', 'tamilnadu': 'Tamil Nadu',
+  'karnataka': 'Karnataka', 'maharashtra': 'Maharashtra',
+  'delhi': 'NCT of Delhi', 'new delhi': 'NCT of Delhi',
+  'telangana': 'Telangana', 'andhra pradesh': 'Andhra Pradesh',
+  'gujarat': 'Gujarat', 'west bengal': 'West Bengal',
+  'rajasthan': 'Rajasthan', 'kerala': 'Kerala',
+  'uttar pradesh': 'Uttar Pradesh', 'haryana': 'Haryana',
+  'punjab': 'Punjab', 'madhya pradesh': 'Madhya Pradesh',
+  'odisha': 'Odisha', 'orissa': 'Odisha',
+  'bihar': 'Bihar', 'jharkhand': 'Jharkhand',
+  'chhattisgarh': 'Chhattisgarh', 'assam': 'Assam',
   'jammu and kashmir': 'Jammu and Kashmir',
   'himachal pradesh': 'Himachal Pradesh',
-  'uttarakhand': 'Uttarakhand',
-  'chandigarh': 'Chandigarh',
-  'puducherry': 'Puducherry',
+  'uttarakhand': 'Uttarakhand', 'chandigarh': 'Chandigarh',
+  'puducherry': 'Puducherry', 'goa': 'Goa', 'sikkim': 'Sikkim',
+  'arunachal pradesh': 'Arunachal Pradesh', 'manipur': 'Manipur',
+  'meghalaya': 'Meghalaya', 'mizoram': 'Mizoram',
+  'nagaland': 'Nagaland', 'tripura': 'Tripura', 'ladakh': 'Ladakh',
 };
 
-const TOPO_URL = 'https://raw.githubusercontent.com/deldersveld/topojson/master/countries/india/india-states.json';
+// Reverse map for click handler — convert TopoJSON name back to data name
+const REVERSE_ALIASES = {};
+Object.entries(STATE_ALIASES).forEach(([dataName, topoName]) => {
+  if (!REVERSE_ALIASES[topoName]) REVERSE_ALIASES[topoName] = dataName;
+});
 
-export default function IndiaMap({ stateDensity = [], onViewMap }) {
+const TOPO_SOURCES = [
+  'https://cdn.jsdelivr.net/gh/udit-001/india-maps-data@main/topojson/india.json',
+  'https://cdn.statically.io/gh/udit-001/india-maps-data/main/topojson/india.json',
+  '/data/india-states.json',
+];
+
+async function loadTopoJSON() {
+  for (const url of TOPO_SOURCES) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data && data.objects) {
+        console.log(`[IndiaMap] Loaded TopoJSON from: ${url}`);
+        return data;
+      }
+    } catch (e) {
+      console.warn(`[IndiaMap] Failed ${url}:`, e.message);
+    }
+  }
+  return null;
+}
+
+export default function IndiaMap({ stateDensity = [], onStateClick }) {
   const svgRef = useRef(null);
   const containerRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
   const [topoData, setTopoData] = useState(null);
+  const [loadError, setLoadError] = useState(false);
 
-  // Build state value lookup
+  // Build state value lookup keyed by canonical state name (TopoJSON name)
   const valueByState = React.useMemo(() => {
     const m = new Map();
     stateDensity.forEach(({ state, total, mega }) => {
       const key = STATE_ALIASES[state.toLowerCase()] || state;
-      m.set(key, { total, mega });
+      m.set(key, { total, mega, originalName: state });
     });
     return m;
   }, [stateDensity]);
 
-  // Fetch TopoJSON once
   useEffect(() => {
-    fetch(TOPO_URL)
-      .then((r) => r.json())
-      .then(setTopoData)
-      .catch((e) => console.error('TopoJSON load failed:', e));
+    let cancelled = false;
+    loadTopoJSON().then((data) => {
+      if (cancelled) return;
+      if (data) setTopoData(data);
+      else setLoadError(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
-  // Render map
   useEffect(() => {
     if (!topoData || !svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    const width = 460;
-    const height = 460;
+    const width = 480;
+    const height = 480;
     svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-    // Get the main feature collection
     const objKey = Object.keys(topoData.objects)[0];
     const states = topojson.feature(topoData, topoData.objects[objKey]);
 
-    // Projection
     const projection = d3.geoMercator().fitSize([width, height], states);
     const path = d3.geoPath().projection(projection);
 
-    // Color scale based on patent counts
+    const findStateName = (props) =>
+      props.st_nm || props.NAME_1 || props.name || props.STATE || props.NAME || '';
+
     const maxVal = Math.max(...[...valueByState.values()].map((v) => v.total), 10);
     const color = d3
       .scaleSequential()
       .domain([0, maxVal])
       .interpolator(d3.interpolate('#EEF2F7', '#2C4A6B'));
 
-    // Find state name property — TopoJSON files vary
-    const findStateName = (props) => {
-      return (
-        props.NAME_1 ||
-        props.name ||
-        props.st_nm ||
-        props.STATE ||
-        props.NAME ||
-        ''
-      );
-    };
-
-    // Draw states
     svg
       .append('g')
       .selectAll('path')
@@ -118,7 +119,10 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
       })
       .attr('stroke', '#FFFFFF')
       .attr('stroke-width', 0.7)
-      .style('cursor', 'pointer')
+      .style('cursor', (d) => {
+        const name = findStateName(d.properties);
+        return valueByState.has(name) ? 'pointer' : 'default';
+      })
       .on('mouseenter', function (event, d) {
         d3.select(this).attr('stroke', '#1E3A5F').attr('stroke-width', 1.5);
         const name = findStateName(d.properties);
@@ -130,18 +134,28 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
           state: name || 'Unknown',
           total: v.total,
           mega: v.mega,
+          clickable: !!valueByState.get(name),
         });
       })
       .on('mousemove', function (event) {
         const rect = containerRef.current.getBoundingClientRect();
-        setTooltip((t) => (t ? { ...t, x: event.clientX - rect.left + 10, y: event.clientY - rect.top + 10 } : null));
+        setTooltip((t) =>
+          t ? { ...t, x: event.clientX - rect.left + 10, y: event.clientY - rect.top + 10 } : null
+        );
       })
       .on('mouseleave', function () {
         d3.select(this).attr('stroke', '#FFFFFF').attr('stroke-width', 0.7);
         setTooltip(null);
+      })
+      .on('click', function (event, d) {
+        const name = findStateName(d.properties);
+        const v = valueByState.get(name);
+        if (!v || !onStateClick) return;
+        // Pass the ORIGINAL data name (e.g. "Delhi" not "NCT of Delhi") so backend filter works
+        onStateClick(v.originalName, name);
       });
 
-    // Major innovation cities — uniform-size dots
+    // City dots
     const cities = [
       { name: 'New Delhi', coord: [77.21, 28.61] },
       { name: 'Mumbai', coord: [72.87, 19.07] },
@@ -163,7 +177,8 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
         .attr('r', 3)
         .attr('fill', '#0A0A0A')
         .attr('stroke', '#FFFFFF')
-        .attr('stroke-width', 1.2);
+        .attr('stroke-width', 1.2)
+        .style('pointer-events', 'none');
       cityGroup
         .append('text')
         .attr('x', x + 6)
@@ -175,13 +190,13 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
         .style('fill', '#1A1A1A')
         .style('pointer-events', 'none');
     });
-  }, [topoData, valueByState]);
+  }, [topoData, valueByState, onStateClick]);
 
   return (
     <div className="map-column" ref={containerRef}>
       <div className="map-header">
         <div className="map-title">Patent Activity Across India</div>
-        <div className="map-subtitle">Patents by State (Current Period)</div>
+        <div className="map-subtitle">Click any shaded state to view patents</div>
       </div>
 
       <div className="map-legend">
@@ -195,10 +210,16 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
         </div>
         <span className="legend-label">High</span>
       </div>
-      <div className="legend-caption">Darker shading indicates higher patent activity</div>
+      <div className="legend-caption">Darker shading = more patents</div>
 
       <div className="map-svg-wrap">
-        <svg ref={svgRef} style={{ width: '100%', height: 'auto', maxHeight: 460 }} />
+        {loadError ? (
+          <div className="empty-state" style={{ padding: '60px 20px', textAlign: 'center' }}>
+            Map data unavailable. Check network connection.
+          </div>
+        ) : (
+          <svg ref={svgRef} style={{ width: '100%', height: 'auto', maxHeight: 480 }} />
+        )}
         {tooltip && (
           <div className="map-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
             <div className="tooltip-state">{tooltip.state}</div>
@@ -210,14 +231,12 @@ export default function IndiaMap({ stateDensity = [], onViewMap }) {
               <span>Total Patents</span>
               <strong>{fmt(tooltip.total)}</strong>
             </div>
-            <div className="tooltip-link">View State Report →</div>
+            {tooltip.clickable && (
+              <div className="tooltip-hint">Click to view patents →</div>
+            )}
           </div>
         )}
       </div>
-
-      <button className="map-button" onClick={onViewMap}>
-        View India Map <ArrowRight size={11} strokeWidth={2} />
-      </button>
     </div>
   );
 }

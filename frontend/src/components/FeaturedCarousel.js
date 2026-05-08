@@ -1,16 +1,20 @@
 import React, { useRef } from 'react';
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { truncate, titleCase, cleanApplicants } from '../utils/format';
 
-function FeaturedCard({ patent }) {
+function FeaturedCard({ patent, onClick }) {
   const score = (patent.mega_score || 0).toFixed(1);
   const applicants = cleanApplicants(patent.applicants);
-  const applicantName = applicants[0] || patent.applicant || 'Undisclosed Applicant';
+  const applicantName = applicants[0] || 'Undisclosed Applicant';
   const field = patent.field || patent.pub_type || 'General';
   const title = patent.title || 'Untitled Innovation';
 
   return (
-    <div className="featured-card">
+    <button
+      className="featured-card"
+      onClick={() => onClick(patent)}
+      aria-label={`View patent: ${title}`}
+    >
       <div className="featured-card-top">
         <div className="featured-score">{score}</div>
         <div className="featured-tag">
@@ -29,11 +33,11 @@ function FeaturedCard({ patent }) {
         <span className="featured-applicant-dot" />
         <span title={applicantName}>{titleCase(truncate(applicantName, 38))}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
-export default function FeaturedCarousel({ patents = [], onViewAll }) {
+export default function FeaturedCarousel({ patents = [], onPatentClick }) {
   const carouselRef = useRef(null);
 
   const scroll = (dir) => {
@@ -52,38 +56,51 @@ export default function FeaturedCarousel({ patents = [], onViewAll }) {
             <span className="featured-sub">Top MEGA Patents</span>
           </div>
         </div>
-        <div className="empty-state">Featured patents will appear once journals are processed.</div>
+        <div className="empty-state">
+          Featured patents will appear once journals are processed.
+        </div>
       </section>
     );
   }
 
   // Sort by mega_score descending, take top 10
-  const sorted = [...patents].sort((a, b) => (b.mega_score || 0) - (a.mega_score || 0)).slice(0, 10);
+  const sorted = [...patents]
+    .sort((a, b) => (b.mega_score || 0) - (a.mega_score || 0))
+    .slice(0, 10);
 
   return (
     <section className="featured">
       <div className="featured-header">
         <div className="featured-title-row">
           <span className="featured-title">Featured Innovations</span>
-          <span className="featured-sub">Top {sorted.length} MEGA Patents</span>
+          <span className="featured-sub">Top {sorted.length} MEGA Patents · click any to view details</span>
         </div>
-        <span className="featured-viewall" onClick={onViewAll}>
-          View All <ArrowRight size={11} strokeWidth={2} />
-        </span>
       </div>
 
       <div className="carousel-wrap">
-        <button className="carousel-arrow left" onClick={() => scroll('left')} aria-label="Scroll left">
+        <button
+          className="carousel-arrow left"
+          onClick={() => scroll('left')}
+          aria-label="Scroll left"
+        >
           <ChevronLeft size={16} strokeWidth={2} />
         </button>
 
         <div className="carousel" ref={carouselRef}>
           {sorted.map((p, i) => (
-            <FeaturedCard key={p.id || p.application_no || i} patent={p} />
+            <FeaturedCard
+              key={p.id || p.application_no || i}
+              patent={p}
+              onClick={onPatentClick}
+            />
           ))}
         </div>
 
-        <button className="carousel-arrow right" onClick={() => scroll('right')} aria-label="Scroll right">
+        <button
+          className="carousel-arrow right"
+          onClick={() => scroll('right')}
+          aria-label="Scroll right"
+        >
           <ChevronRight size={16} strokeWidth={2} />
         </button>
       </div>

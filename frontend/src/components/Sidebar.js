@@ -1,25 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  Home, Compass, Search, Users, Cpu, Map as MapIcon,
-  Star, FileText, Settings, LogOut, ChevronDown
-} from 'lucide-react';
+import { Home, Compass, Search as SearchIcon, Users, Cpu, Map, Bookmark, FileText, Menu, X } from 'lucide-react';
 
-const NAV_ITEMS = [
-  { id: 'front', label: 'Front Page', icon: Home },
-  { id: 'discover', label: 'Discover', icon: Compass },
-  { id: 'search', label: 'Search', icon: Search },
-  { id: 'applicants', label: 'Applicants', icon: Users },
-  { id: 'tech', label: 'Technologies', icon: Cpu },
-  { id: 'explorer', label: 'Explorer', icon: MapIcon },
-  { id: 'watchlists', label: 'Watchlists', icon: Star },
-  { id: 'reports', label: 'Reports', icon: FileText },
-];
-
-/**
- * Razorpay Payment Button
- * Mounts the official Razorpay checkout button inside a form.
- * Re-mounting requires re-injecting the script tag.
- */
 function RazorpayButton() {
   const formRef = useRef(null);
   const mountedRef = useRef(false);
@@ -37,77 +18,105 @@ function RazorpayButton() {
   return <form ref={formRef} style={{ display: 'inline-block', width: '100%' }} />;
 }
 
-export default function Sidebar({ active = 'front', onNavigate, balance = 0 }) {
+const NAV_ITEMS = [
+  { id: 'discover',     label: 'Discover',     icon: Compass,    placeholder: true },
+  { id: 'search',       label: 'Search',       icon: SearchIcon, placeholder: true },
+  { id: 'applicants',   label: 'Applicants',   icon: Users,      placeholder: true },
+  { id: 'technologies', label: 'Technologies', icon: Cpu,        placeholder: true },
+  { id: 'explorer',     label: 'Explorer',     icon: Map,        placeholder: true },
+  { id: 'watchlists',   label: 'Watchlists',   icon: Bookmark,   placeholder: true },
+  { id: 'reports',      label: 'Reports',      icon: FileText,   placeholder: true },
+];
+
+export default function Sidebar({ settings = null, onNavClick }) {
   const [showRazorpay, setShowRazorpay] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close mobile sidebar when clicking a nav item
+  const handleNavClick = (item) => {
+    setMobileOpen(false);
+    onNavClick && onNavClick(item.label);
+  };
+
+  const amount = settings?.reimbursement_amount ?? 849;
+  const currency = settings?.reimbursement_currency ?? 'INR';
+  const label = settings?.reimbursement_label ?? 'Reimbursement Collected';
+  const symbol = currency === 'INR' ? '₹' : currency + ' ';
 
   return (
-    <aside className="sidebar">
-      {/* BRAND */}
-      <div className="brand">
-        <div className="brand-mark">MEGA</div>
-        <div className="brand-sub">Patent Discovery</div>
-        <div className="brand-divider" />
-        <div className="brand-tagline">Editorial Intelligence Terminal</div>
-      </div>
+    <>
+      {/* Mobile hamburger toggle (only visible on small screens via CSS) */}
+      <button
+        className="mobile-menu-toggle"
+        onClick={() => setMobileOpen(!mobileOpen)}
+        aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+      >
+        {mobileOpen ? <X size={18} strokeWidth={2} /> : <Menu size={18} strokeWidth={2} />}
+      </button>
 
-      {/* NAVIGATION */}
-      <nav className="nav">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-          <div
-            key={id}
-            className={`nav-item ${active === id ? 'active' : ''}`}
-            onClick={() => onNavigate?.(id)}
-          >
-            <Icon className="nav-icon" size={14} strokeWidth={1.8} />
-            <span>{label}</span>
-          </div>
-        ))}
-      </nav>
+      {/* Backdrop for mobile sidebar overlay */}
+      {mobileOpen && <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />}
 
-      {/* PAYMENT / REIMBURSEMENT WIDGET */}
-      <div className="payment-widget">
-        <div className="payment-widget-label">
-          Reimbursement Balance
-        </div>
-        <div className="payment-widget-amount">
-          ₹ {balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
-        <div className="payment-widget-caption">
-          Available for patent data access &amp; downloads
+      <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark">MEGA</div>
+          <div className="brand-sub">Patent Discovery</div>
+          <div className="brand-divider" />
+          <div className="brand-tagline">Editorial Intelligence Terminal</div>
         </div>
 
-        {!showRazorpay ? (
-          <button
-            className="payment-widget-button"
-            onClick={() => setShowRazorpay(true)}
-          >
-            Add Reimbursement
-          </button>
-        ) : (
-          <div style={{ marginTop: 12 }}>
-            <RazorpayButton />
+        <nav className="nav">
+          <div className="nav-item active" onClick={() => setMobileOpen(false)}>
+            <Home className="nav-icon" size={14} strokeWidth={1.8} />
+            <span>Front Page</span>
           </div>
-        )}
-      </div>
 
-      {/* SESSION FOOTER */}
-      <div className="session-area">
-        <div className="session-label">Session</div>
-        <div className="session-user">
-          <span>Analyst</span>
-          <ChevronDown size={12} strokeWidth={1.8} />
-        </div>
-        <div className="session-actions">
-          <div className="session-link">
-            <Settings size={12} strokeWidth={1.8} />
-            <span>Settings</span>
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                className="nav-item nav-item-button"
+                onClick={() => handleNavClick(item)}
+              >
+                <Icon className="nav-icon" size={14} strokeWidth={1.8} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="payment-widget">
+          <div className="payment-widget-label">{label}</div>
+          <div className="payment-widget-amount">
+            {symbol} {Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="session-link">
-            <LogOut size={12} strokeWidth={1.8} />
-            <span>Sign Out</span>
+          <div className="payment-widget-caption">
+            Available for future platform enhancements
+          </div>
+
+          {!showRazorpay ? (
+            <button
+              className="payment-widget-button"
+              onClick={() => setShowRazorpay(true)}
+            >
+              Add Reimbursement
+            </button>
+          ) : (
+            <div style={{ marginTop: 12 }}>
+              <RazorpayButton />
+            </div>
+          )}
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-label">Source</div>
+          <div className="sidebar-footer-text">
+            IP India Patent Journal<br />
+            Updated weekly
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

@@ -1028,3 +1028,981 @@ ul { list-style: none; }
   .hero-headline { font-size: 32px; }
   .main-grid { grid-template-columns: 1fr; }
 }
+/* =========================================================
+   v3.2 ADDITIONS — append to existing styles/index.css
+   Drawer, clickable rows, search bar, sidebar footer
+   ========================================================= */
+
+/* ============= DRAWER ============= */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.45);
+  z-index: 200;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(560px, 92vw);
+  height: 100vh;
+  background: var(--color-canvas, #FAF8F4);
+  border-left: 1px solid var(--color-divider, #E5E0D6);
+  z-index: 201;
+  overflow-y: auto;
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-divider, #E5E0D6);
+  background: var(--color-canvas, #FAF8F4);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.drawer-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 6px 10px 6px 4px;
+  color: var(--color-text, #1A1A1A);
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+
+.drawer-back:hover {
+  background: rgba(30, 58, 95, 0.06);
+}
+
+.drawer-close {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--color-text-subtle, #6B6760);
+  border-radius: 2px;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.drawer-close:hover {
+  background: rgba(10, 10, 10, 0.06);
+  color: var(--color-text, #1A1A1A);
+}
+
+.drawer-body {
+  flex: 1;
+  padding: 24px 28px 60px;
+  overflow-y: auto;
+}
+
+.drawer-loading,
+.drawer-empty,
+.drawer-error {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--color-text-subtle, #6B6760);
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+}
+
+.drawer-error {
+  color: #A03030;
+}
+
+/* ============= LIST VIEW (filtered patents) ============= */
+
+.drawer-list-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-divider, #E5E0D6);
+}
+
+.drawer-list-eyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle, #6B6760);
+  margin-bottom: 6px;
+}
+
+.drawer-list-title {
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--color-text, #1A1A1A);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.drawer-list-count {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  color: var(--color-text-subtle, #6B6760);
+  letter-spacing: 0.06em;
+}
+
+.drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--color-divider, #E5E0D6);
+  border: 1px solid var(--color-divider, #E5E0D6);
+}
+
+.drawer-list-row {
+  background: var(--color-canvas, #FAF8F4);
+  border: none;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+  font-family: 'Manrope', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drawer-list-row:hover {
+  background: #F5F2EC;
+}
+
+.drawer-list-row-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drawer-list-score {
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text, #1A1A1A);
+  min-width: 28px;
+}
+
+.drawer-list-field {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle, #6B6760);
+  background: rgba(30, 58, 95, 0.06);
+  padding: 3px 7px;
+  border-radius: 2px;
+}
+
+.drawer-list-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text, #1A1A1A);
+  line-height: 1.4;
+}
+
+.drawer-list-row-meta {
+  font-size: 11px;
+  color: var(--color-text-subtle, #6B6760);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ============= SINGLE PATENT VIEW ============= */
+
+.patent-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.patent-detail-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.patent-detail-tag {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle, #6B6760);
+  background: rgba(30, 58, 95, 0.06);
+  padding: 4px 9px;
+  border-radius: 2px;
+}
+
+.patent-detail-tier {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 4px 9px;
+  border-radius: 2px;
+  background: var(--color-text, #1A1A1A);
+  color: white;
+}
+
+.patent-detail-tier.tier-ultra {
+  background: #B8860B;
+}
+
+.patent-detail-tier.tier-mega {
+  background: #1A1A1A;
+}
+
+.patent-detail-tier.tier-standard {
+  background: #6B6760;
+}
+
+.patent-detail-score {
+  text-align: right;
+  font-family: 'Fraunces', serif;
+}
+
+.patent-score-num {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--color-text, #1A1A1A);
+  line-height: 1;
+  display: block;
+}
+
+.patent-score-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle, #6B6760);
+}
+
+.patent-detail-title {
+  font-family: 'Fraunces', serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--color-text, #1A1A1A);
+  line-height: 1.25;
+  margin: 0 0 24px 0;
+  letter-spacing: -0.01em;
+}
+
+.patent-detail-meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 16px 18px;
+  background: rgba(30, 58, 95, 0.04);
+  margin-bottom: 24px;
+  border-left: 2px solid var(--color-text, #1A1A1A);
+}
+
+.patent-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11.5px;
+  padding: 3px 0;
+}
+
+.patent-meta-label {
+  color: var(--color-text-subtle, #6B6760);
+  letter-spacing: 0.04em;
+}
+
+.patent-meta-value {
+  color: var(--color-text, #1A1A1A);
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  text-align: right;
+  max-width: 60%;
+}
+
+.patent-detail-section {
+  margin-bottom: 22px;
+}
+
+.patent-section-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle, #6B6760);
+  margin-bottom: 8px;
+}
+
+.patent-section-content {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--color-text, #1A1A1A);
+}
+
+.patent-list-item {
+  padding: 4px 0;
+  line-height: 1.4;
+}
+
+.patent-ipc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.patent-ipc-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: rgba(30, 58, 95, 0.08);
+  color: var(--color-text, #1A1A1A);
+  padding: 4px 10px;
+  border-radius: 2px;
+  letter-spacing: 0.02em;
+}
+
+.patent-abstract {
+  font-family: 'Fraunces', serif;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--color-text, #1A1A1A);
+  text-align: justify;
+}
+
+.patent-address {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-subtle, #6B6760);
+  font-style: italic;
+}
+
+/* ============= CLICKABLE ROWS (applicants + tech) ============= */
+
+.applicant-row.clickable,
+.tech-row.clickable {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: inherit;
+  cursor: pointer;
+  padding: 12px 0;
+  transition: background 0.12s, padding 0.12s;
+  font-family: inherit;
+  color: inherit;
+  border-radius: 0;
+}
+
+.applicant-row.clickable:hover,
+.tech-row.clickable:hover {
+  background: rgba(30, 58, 95, 0.04);
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Override any layout from existing .applicant-row / .tech-row inside button */
+.applicant-row.clickable {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.tech-row.clickable {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ============= SEARCH BAR ============= */
+
+.search-bar-form {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--color-text-subtle, #6B6760);
+  pointer-events: none;
+}
+
+.search-bar {
+  width: 100%;
+  padding: 9px 36px 9px 34px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  background: rgba(30, 58, 95, 0.04);
+  border: 1px solid var(--color-divider, #E5E0D6);
+  border-radius: 2px;
+  color: var(--color-text, #1A1A1A);
+  transition: all 0.15s;
+}
+
+.search-bar:focus {
+  outline: none;
+  background: white;
+  border-color: var(--color-text, #1A1A1A);
+}
+
+.search-bar::placeholder {
+  color: var(--color-text-subtle, #6B6760);
+}
+
+.search-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--color-text-subtle, #6B6760);
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+}
+
+.search-clear:hover {
+  color: var(--color-text, #1A1A1A);
+}
+
+/* ============= SIDEBAR FOOTER (replaces Settings/SignOut) ============= */
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 18px 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-footer-label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 6px;
+}
+
+.sidebar-footer-text {
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+/* ============= TOOLTIP HINT ============= */
+
+.tooltip-hint {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  color: var(--color-gold, #B8860B);
+  letter-spacing: 0.04em;
+}
+/* =========================================================
+   v3.3 ADDITIONS — append to existing styles/index.css
+   - Clickable metrics
+   - Drawer index views (applicant_index, field_index, placeholder)
+   - Drawer filter input
+   - Mobile responsive (hamburger sidebar, stacked layouts)
+   - Error banner, loading toast, nav item buttons
+   ========================================================= */
+
+/* ============= CLICKABLE METRICS ============= */
+
+.metric-clickable {
+  background: none;
+  border: none;
+  text-align: inherit;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  padding: inherit;
+  transition: background 0.15s, transform 0.12s;
+  width: 100%;
+  display: block;
+}
+
+.metric-clickable:hover {
+  background: rgba(30, 58, 95, 0.04);
+  transform: translateY(-1px);
+}
+
+.metric-clickable:active {
+  transform: translateY(0);
+}
+
+.metric-clickable .metric-caption {
+  color: var(--color-blue, #1E3A5F);
+  font-weight: 500;
+}
+
+/* ============= DRAWER INDEX VIEWS ============= */
+
+.drawer-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(30, 58, 95, 0.04);
+  border: 1px solid var(--color-divider, #E5E0D6);
+  border-radius: 2px;
+  margin-bottom: 16px;
+}
+
+.drawer-filter svg {
+  color: var(--color-text-subtle, #6B6760);
+  flex-shrink: 0;
+}
+
+.drawer-filter-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--color-text, #1A1A1A);
+}
+
+.drawer-filter-input::placeholder {
+  color: var(--color-text-subtle, #6B6760);
+}
+
+.drawer-index-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-divider, #E5E0D6);
+}
+
+.drawer-index-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-canvas, #FAF8F4);
+  border: none;
+  border-bottom: 1px solid var(--color-divider, #E5E0D6);
+  padding: 11px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, padding 0.12s;
+  font-family: 'Manrope', sans-serif;
+}
+
+.drawer-index-row:last-child {
+  border-bottom: none;
+}
+
+.drawer-index-row:hover {
+  background: #F5F2EC;
+  padding-left: 18px;
+}
+
+.drawer-index-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--color-text-subtle, #6B6760);
+  letter-spacing: 0.04em;
+}
+
+.drawer-index-name {
+  font-size: 12.5px;
+  color: var(--color-text, #1A1A1A);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-index-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text, #1A1A1A);
+}
+
+/* ============= DRAWER PLACEHOLDER VIEW ============= */
+
+.drawer-placeholder {
+  text-align: center;
+  padding: 60px 30px;
+}
+
+.drawer-placeholder-eyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-gold, #B8860B);
+  margin-bottom: 10px;
+}
+
+.drawer-placeholder-title {
+  font-family: 'Fraunces', serif;
+  font-size: 30px;
+  font-weight: 500;
+  color: var(--color-text, #1A1A1A);
+  margin: 0 0 12px 0;
+  letter-spacing: -0.01em;
+}
+
+.drawer-placeholder-text {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--color-text-subtle, #6B6760);
+  margin: 0 0 32px 0;
+  line-height: 1.5;
+}
+
+.drawer-placeholder-divider {
+  width: 50px;
+  height: 1px;
+  background: var(--color-divider, #E5E0D6);
+  margin: 0 auto 32px auto;
+}
+
+.drawer-placeholder-meta {
+  font-family: 'Manrope', sans-serif;
+  font-size: 12.5px;
+  color: var(--color-text-subtle, #6B6760);
+  line-height: 1.6;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
+/* ============= NAV ITEM BUTTONS (sidebar) ============= */
+
+.nav-item-button {
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+  transition: all 0.15s;
+}
+
+.nav-item-button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.9);
+  padding-left: 26px;
+}
+
+/* ============= ERROR BANNER & LOADING TOAST ============= */
+
+.error-banner {
+  padding: 14px;
+  background: #FFF3F3;
+  border: 1px solid #F0C0C0;
+  margin-bottom: 20px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  color: #A03030;
+}
+
+.error-retry {
+  background: none;
+  border: none;
+  text-decoration: underline;
+  color: #A03030;
+  cursor: pointer;
+  font: inherit;
+}
+
+.loading-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  background: #0A0A0A;
+  color: #FFF;
+  padding: 8px 14px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 2px;
+  z-index: 100;
+}
+
+/* ============= MOBILE HAMBURGER ============= */
+
+.mobile-menu-toggle {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 250;
+  background: #0A0A0A;
+  color: #FFF;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 2px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 199;
+}
+
+/* =========================================================
+   MOBILE RESPONSIVE — phones & tablets
+   ========================================================= */
+
+/* Tablet & smaller (≤ 1024px) — tighten layouts */
+@media (max-width: 1024px) {
+  .metrics-row {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .main-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .applicant-name {
+    font-size: 12px;
+  }
+  .canvas {
+    padding: 28px 32px !important;
+  }
+}
+
+/* Mobile (≤ 768px) — major layout shift */
+@media (max-width: 768px) {
+  /* Sidebar becomes slide-out overlay */
+  .sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px !important;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+    z-index: 200;
+    overflow-y: auto;
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    display: block;
+  }
+
+  /* Hamburger toggle visible */
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  /* Canvas full width */
+  .canvas {
+    margin-left: 0 !important;
+    padding: 70px 18px 40px !important;
+    max-width: 100% !important;
+  }
+  .app {
+    grid-template-columns: 1fr !important;
+    display: block !important;
+  }
+
+  /* Hero scales down */
+  .hero-headline {
+    font-size: 28px !important;
+    line-height: 1.2 !important;
+  }
+  .hero-deck-text {
+    font-size: 14px !important;
+  }
+  .hero-brief {
+    padding: 16px !important;
+  }
+  .hero-brief-headline {
+    font-size: 18px !important;
+  }
+
+  /* Metrics stack 2x3 */
+  .metrics-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .metric {
+    padding: 14px 12px !important;
+  }
+  .metric-value {
+    font-size: 26px !important;
+  }
+  .metric-label {
+    font-size: 10px !important;
+  }
+  .metric-caption {
+    font-size: 10px !important;
+  }
+
+  /* Snapshot title wraps */
+  .snapshot-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px;
+  }
+  .snapshot-title {
+    font-size: 11px !important;
+  }
+
+  /* Main grid stacks vertically */
+  .main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+
+  /* Featured carousel cards narrower */
+  .featured-card {
+    min-width: 240px !important;
+    max-width: 240px !important;
+    padding: 16px !important;
+  }
+  .carousel-arrow {
+    display: none !important;
+  }
+
+  /* Map column full width */
+  .map-column {
+    padding: 0 !important;
+  }
+  .map-svg-wrap svg {
+    max-height: 320px !important;
+  }
+  .map-tooltip {
+    font-size: 10px !important;
+    padding: 8px 10px !important;
+  }
+
+  /* Drawer becomes full screen */
+  .drawer {
+    width: 100vw !important;
+    border-left: none;
+  }
+  .drawer-body {
+    padding: 18px 20px 60px !important;
+  }
+  .patent-detail-title {
+    font-size: 19px !important;
+  }
+  .patent-abstract {
+    font-size: 13px !important;
+  }
+  .drawer-list-title {
+    font-size: 18px !important;
+  }
+  .drawer-placeholder-title {
+    font-size: 24px !important;
+  }
+  .drawer-placeholder {
+    padding: 40px 20px !important;
+  }
+
+  /* Topbar / search */
+  .topbar {
+    margin-top: 0 !important;
+  }
+  .search-bar-form {
+    max-width: 100% !important;
+  }
+
+  /* Paid notice stacks */
+  .paid-notice {
+    flex-direction: column !important;
+    gap: 10px !important;
+    padding: 16px !important;
+  }
+  .paid-notice-left {
+    flex-wrap: wrap !important;
+  }
+
+  /* Sidebar footer compact */
+  .sidebar-footer {
+    padding: 14px 22px !important;
+  }
+}
+
+/* Phone (≤ 480px) — single column metrics, tighter spacing */
+@media (max-width: 480px) {
+  .metrics-row {
+    grid-template-columns: 1fr !important;
+  }
+  .canvas {
+    padding: 70px 14px 30px !important;
+  }
+  .hero-headline {
+    font-size: 24px !important;
+  }
+  .featured-card {
+    min-width: 220px !important;
+    max-width: 220px !important;
+  }
+  .featured-card-title {
+    font-size: 12px !important;
+  }
+  .drawer-list-row {
+    padding: 12px 14px !important;
+  }
+}
+
+/* Touch-friendly tap targets on mobile */
+@media (hover: none) and (pointer: coarse) {
+  .metric-clickable,
+  .applicant-row.clickable,
+  .tech-row.clickable,
+  .featured-card,
+  .drawer-list-row,
+  .drawer-index-row {
+    min-height: 44px;  /* iOS minimum tap target */
+  }
+}
