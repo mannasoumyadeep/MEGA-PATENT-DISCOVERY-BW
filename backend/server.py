@@ -74,6 +74,10 @@ app.add_middleware(
 client: Optional[AsyncIOMotorClient] = None
 db = None
 
+# Razorpay webhook configuration (v3.8.4)
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+
 # Job tracking (in-memory for v1)
 JOBS: Dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
@@ -96,6 +100,9 @@ from services import (
     extract_patents_from_pdf,
     determine_pub_type_from_filename,
 )
+import hmac
+import hashlib
+from fastapi import Request
 
 
 @app.on_event("startup")
@@ -232,34 +239,8 @@ async def list_journals(refresh: str = "0", full: str = "0", limit: int = 300):
 # ============================================
 # DASHBOARD SETTINGS ENDPOINTS (v3.2 patch)
 # ============================================
-@app.get("/api/settings")
-async def get_settings():
-    """Returns dashboard settings (reimbursement amount, label, etc.)"""
-    doc = await db.settings.find_one({"_id": "dashboard"})
-    if not doc:
-        return DEFAULT_SETTINGS
-    doc.pop("_id", None)
-    return doc
 
 
-@app.post("/api/settings")
-async def update_settings(settings: dict):
-    """Updates dashboard settings. POST a JSON body like:
-       {"reimbursement_amount": 1500}
-    Use curl, Postman, or MongoDB Compass to invoke this.
-    """
-    allowed = {"reimbursement_amount", "reimbursement_currency", "reimbursement_label"}
-    update = {k: v for k, v in settings.items() if k in allowed}
-    if not update:
-        raise HTTPException(400, "No valid settings provided")
-    await db.settings.update_one(
-        {"_id": "dashboard"},
-        {"$set": update},
-        upsert=True
-    )
-    doc = await db.settings.find_one({"_id": "dashboard"})
-    doc.pop("_id", None)
-    return doc
 
 @app.post("/api/journals/download")
 async def download_journal(req: DownloadRequest, background_tasks: BackgroundTasks):
@@ -767,3 +748,177 @@ def download_journal_pdfs(journal_no: str, job_id: str, update_fn, sync_db) -> L
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
+
+
+# ============================================
+# DASHBOARD SETTINGS GET (v3.8.4 - computed from payments)
+# ============================================
+@app.get("/api/settings")
+async def get_settings():
+    """Returns dashboard settings with auto-computed Community Support total.
+       Total = base_amount + sum(captured payments) - sum(processed refunds)."""
+    try:
+        doc = await db.settings.find_one({"_id": "dashboard"}) or {}
+    except Exception:
+        doc = {}
+
+    base_amount = doc.get("base_amount")
+    if base_amount is None:
+        base_amount = doc.get("reimbursement_amount", 849)
+
+    captured_total = 0.0
+    refunded_total = 0.0
+    payment_count = 0
+    try:
+        cursor = db.payments.aggregate([
+            {"$match": {"event_type": "payment.captured"}},
+            {"$group": {"_id": None,
+                        "total": {"$sum": "$amount_rupees"},
+                        "count": {"$sum": 1}}}
+        ])
+        async for row in cursor:
+            captured_total = float(row.get("total", 0) or 0)
+            payment_count = int(row.get("count", 0) or 0)
+
+        cursor = db.payments.aggregate([
+            {"$match": {"event_type": "refund.processed"}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount_rupees"}}}
+        ])
+        async for row in cursor:
+            refunded_total = float(row.get("total", 0) or 0)
+    except Exception:
+        pass
+
+    total_amount = float(base_amount) + captured_total - refunded_total
+
+    return {
+        "reimbursement_amount": round(total_amount, 2),
+        "reimbursement_currency": doc.get("reimbursement_currency", "INR"),
+        "reimbursement_label": doc.get("reimbursement_label", "Community Support"),
+        "base_amount": float(base_amount),
+        "captured_total": round(captured_total, 2),
+        "refunded_total": round(refunded_total, 2),
+        "payment_count": payment_count,
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(settings: dict):
+    """Manually override base_amount (starting balance, before payments)."""
+    from fastapi import HTTPException
+    allowed = {"base_amount", "reimbursement_currency", "reimbursement_label"}
+    update = {k: v for k, v in settings.items() if k in allowed}
+
+    if "reimbursement_amount" in settings and "base_amount" not in update:
+        update["base_amount"] = float(settings["reimbursement_amount"])
+
+    if not update:
+        raise HTTPException(400, "No valid settings provided")
+
+    await db.settings.update_one(
+        {"_id": "dashboard"},
+        {"$set": update},
+        upsert=True
+    )
+    return await get_settings()
+
+
+# ============================================
+# RAZORPAY WEBHOOK (v3.8.4)
+# Handles payment.captured, payment.failed, refund.processed.
+# HMAC-verified, idempotent, strips PII.
+# ============================================
+@app.post("/api/razorpay/webhook")
+async def razorpay_webhook(request: Request):
+    """Handle Razorpay payment notifications."""
+    from fastapi import HTTPException
+
+    if not RAZORPAY_WEBHOOK_SECRET:
+        raise HTTPException(500, "Webhook secret not configured on server")
+
+    body_bytes = await request.body()
+    received_signature = request.headers.get("X-Razorpay-Signature", "")
+
+    expected = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode("utf-8"),
+        body_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, received_signature):
+        raise HTTPException(401, "Invalid signature")
+
+    try:
+        event = json.loads(body_bytes)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(400, "Invalid JSON payload")
+
+    event_type = event.get("event", "")
+
+    KNOWN_EVENTS = ("payment.captured", "payment.failed", "refund.processed")
+    if event_type not in KNOWN_EVENTS:
+        return {"status": "ok", "ignored": event_type}
+
+    payload = event.get("payload", {}) or {}
+
+    if event_type == "refund.processed":
+        entity = (payload.get("refund", {}) or {}).get("entity", {}) or {}
+        razorpay_event_id = entity.get("id", "")
+        underlying_payment_id = entity.get("payment_id", "")
+    else:
+        entity = (payload.get("payment", {}) or {}).get("entity", {}) or {}
+        razorpay_event_id = entity.get("id", "")
+        underlying_payment_id = razorpay_event_id
+
+    if not razorpay_event_id:
+        raise HTTPException(400, "Missing entity ID in event")
+
+    existing = await db.payments.find_one({
+        "payment_id": razorpay_event_id,
+        "event_type": event_type,
+    })
+    if existing:
+        return {
+            "status": "ok",
+            "duplicate": True,
+            "payment_id": razorpay_event_id,
+        }
+
+    amount_paise = int(entity.get("amount") or 0)
+    amount_rupees = amount_paise / 100.0
+
+    record = {
+        "payment_id": razorpay_event_id,
+        "underlying_payment_id": underlying_payment_id,
+        "event_type": event_type,
+        "amount_paise": amount_paise,
+        "amount_rupees": amount_rupees,
+        "currency": entity.get("currency", "INR"),
+        "status": entity.get("status", "unknown"),
+        "method": entity.get("method", "unknown"),
+        "order_id": entity.get("order_id", ""),
+        "received_at": datetime.utcnow().isoformat(),
+    }
+    await db.payments.insert_one(record)
+
+    return {
+        "status": "ok",
+        "payment_id": razorpay_event_id,
+        "event_type": event_type,
+        "amount_rupees": amount_rupees,
+    }
+
+
+# ============================================
+# PAYMENTS AUDIT ENDPOINT
+# ============================================
+@app.get("/api/admin/payments")
+async def list_payments(limit: int = 50):
+    """Returns recent payment records (audit trail)."""
+    limit = max(1, min(limit, 500))
+    cursor = db.payments.find({}).sort("received_at", -1).limit(limit)
+    records = []
+    async for r in cursor:
+        r.pop("_id", None)
+        records.append(r)
+    return {"payments": records, "count": len(records)}
