@@ -1,7 +1,6 @@
 /**
- * MEGA Patent Discovery — API Client v3.3
- * Adds: getAllApplicantsIndex, getAllFieldsIndex for browse-all views
- * Fixed: handles `mega_patents` vs `patents` field naming
+ * MEGA Patent Discovery — API Client v3.5
+ * Added: getPatentsByJournal for "click a journal week" drawer flow
  */
 const API_BASE = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -48,7 +47,7 @@ export const api = {
 };
 
 // ============================================
-// CLIENT-SIDE FILTERING & SEARCH
+// CLIENT-SIDE AGGREGATION
 // ============================================
 
 const APPLICANT_BLACKLIST_RX = [
@@ -148,14 +147,21 @@ export async function searchPatents(query, limit = 30) {
   return patents;
 }
 
+// NEW v3.5: patents for a specific journal week, MEGA-only by default
+export async function getPatentsByJournal(journalNo, limit = 100) {
+  const { patents = [] } = await api.listPatents({
+    journal_no: journalNo,
+    mega_only: '1',
+    limit,
+    sort: 'mega_score',
+  });
+  return patents;
+}
+
 // ============================================
-// INDEX VIEWS — for "browse all" drawers
+// INDEX VIEWS
 // ============================================
 
-/**
- * Fetches a wide sample (5000 patents) and aggregates ALL distinct applicants.
- * Used for "Distinct Applicants: 258" metric click.
- */
 export async function getAllApplicantsIndex() {
   const { patents = [] } = await api.listPatents({ limit: 5000, sort: 'mega_score' });
   const counts = new Map();
@@ -173,13 +179,8 @@ export async function getAllApplicantsIndex() {
   }));
 }
 
-/**
- * Returns all fields from /api/stats by_field.
- * Used for "Tech Fields: 99" metric click.
- */
 export async function getAllFieldsIndex() {
   const { by_field = [] } = await api.stats();
-  // Include even Unknown — user wants to see EVERYTHING
   return by_field
     .filter((f) => f.field)
     .sort((a, b) => (b.count || 0) - (a.count || 0))
@@ -188,9 +189,6 @@ export async function getAllFieldsIndex() {
     }));
 }
 
-/**
- * Used for "MEGA Patents: 741" metric click — shows all MEGA patents directly.
- */
 export async function getAllMegaPatents(limit = 200) {
   try {
     const res = await api.megaPatents({ limit });

@@ -1,27 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { X, ChevronLeft, Search } from 'lucide-react';
-import { fmt, fmtDate, titleCase, cleanApplicants, truncate } from '../utils/format';
+import { fmt, fmtDate, titleCase, cleanApplicants } from '../utils/format';
 import {
   getPatentsByApplicant,
   getPatentsByField,
   getPatentsByState,
+  getPatentsByJournal,
   searchPatents,
   getAllApplicantsIndex,
   getAllFieldsIndex,
   getAllMegaPatents,
 } from '../api/client';
 
-/**
- * Drawer modes:
- *  - 'patent'           → single patent detail
- *  - 'list'             → filtered list (applicant/field/state/search)
- *  - 'applicant_index'  → browse ALL applicants
- *  - 'field_index'      → browse ALL fields
- *  - 'all_mega'         → browse ALL mega patents
- *  - 'placeholder'      → "under editorial development" message
- *
- * Set drawer prop, drawer renders, click rows drill in via internal navigation.
- */
 export default function PatentDrawer({ drawer, onClose }) {
   const [view, setView] = useState(null);
   const [listData, setListData] = useState(null);
@@ -30,16 +20,14 @@ export default function PatentDrawer({ drawer, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [filterQuery, setFilterQuery] = useState('');
-  const [navStack, setNavStack] = useState([]);  // for "Back" between views
+  const [navStack, setNavStack] = useState([]);
 
-  // ESC key closes
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     if (drawer) window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [drawer, onClose]);
 
-  // Initialize when drawer prop changes
   useEffect(() => {
     if (!drawer) {
       setView(null); setListData(null); setIndexData(null);
@@ -47,40 +35,30 @@ export default function PatentDrawer({ drawer, onClose }) {
       setNavStack([]);
       return;
     }
-
     setNavStack([]);
     setFilterQuery('');
     setError(null);
 
-    // PLACEHOLDER mode — no fetch needed
     if (drawer.mode === 'placeholder') {
       setView('placeholder');
       return;
     }
-
-    // PATENT mode — patent passed directly
     if (drawer.mode === 'patent') {
       setView('patent');
       setActivePatent(drawer.patent);
       return;
     }
-
-    // ALL_MEGA mode — fetch all mega patents
     if (drawer.mode === 'all_mega') {
       setView('all_mega');
       setLoading(true);
       getAllMegaPatents(200)
         .then((patents) => setListData({
-          title: 'All MEGA Patents',
-          subtitle: 'Score ≥ 65',
-          patents,
+          title: 'All MEGA Patents', subtitle: 'Score ≥ 65', patents,
         }))
         .catch((e) => setError(e.message))
         .finally(() => setLoading(false));
       return;
     }
-
-    // APPLICANT_INDEX mode
     if (drawer.mode === 'applicant_index') {
       setView('applicant_index');
       setLoading(true);
@@ -94,8 +72,6 @@ export default function PatentDrawer({ drawer, onClose }) {
         .finally(() => setLoading(false));
       return;
     }
-
-    // FIELD_INDEX mode
     if (drawer.mode === 'field_index') {
       setView('field_index');
       setLoading(true);
@@ -109,8 +85,6 @@ export default function PatentDrawer({ drawer, onClose }) {
         .finally(() => setLoading(false));
       return;
     }
-
-    // LIST mode
     if (drawer.mode === 'list') {
       setView('list');
       setLoading(true);
@@ -119,6 +93,7 @@ export default function PatentDrawer({ drawer, onClose }) {
         drawer.filterType === 'applicant' ? getPatentsByApplicant :
         drawer.filterType === 'field'     ? getPatentsByField :
         drawer.filterType === 'state'     ? getPatentsByState :
+        drawer.filterType === 'journal'   ? getPatentsByJournal :
         drawer.filterType === 'search'    ? searchPatents :
         null;
 
@@ -141,13 +116,7 @@ export default function PatentDrawer({ drawer, onClose }) {
 
   if (!drawer) return null;
 
-  // ============================================
-  // INTERNAL NAVIGATION
-  // ============================================
-
-  const pushNav = (currentView) => {
-    setNavStack((s) => [...s, currentView]);
-  };
+  const pushNav = (currentView) => setNavStack((s) => [...s, currentView]);
 
   const popNav = () => {
     setNavStack((s) => {
@@ -162,14 +131,12 @@ export default function PatentDrawer({ drawer, onClose }) {
     });
   };
 
-  // From any list/index, click a row
   const handlePatentClick = (patent) => {
     pushNav(view);
     setActivePatent(patent);
     setView('patent');
   };
 
-  // From applicant index → drill into that applicant's patents
   const handleApplicantRowClick = (name) => {
     pushNav(view);
     setView('list');
@@ -177,15 +144,12 @@ export default function PatentDrawer({ drawer, onClose }) {
     setError(null);
     getPatentsByApplicant(name, 100)
       .then((patents) => setListData({
-        title: name,
-        subtitle: 'All patents from',
-        patents,
+        title: name, subtitle: 'All patents from', patents,
       }))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   };
 
-  // From field index → drill into that field's patents
   const handleFieldRowClick = (name) => {
     pushNav(view);
     setView('list');
@@ -193,9 +157,7 @@ export default function PatentDrawer({ drawer, onClose }) {
     setError(null);
     getPatentsByField(name, 100)
       .then((patents) => setListData({
-        title: name,
-        subtitle: 'Patents in',
-        patents,
+        title: name, subtitle: 'Patents in', patents,
       }))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -224,7 +186,7 @@ export default function PatentDrawer({ drawer, onClose }) {
           {error && <div className="drawer-error">Error: {error}</div>}
 
           {!loading && !error && view === 'placeholder' && (
-            <PlaceholderView title={drawer.title} />
+            <PlaceholderView title={drawer.title} customCopy={drawer.customCopy} />
           )}
 
           {!loading && !error && (view === 'list' || view === 'all_mega') && listData && (
@@ -258,33 +220,28 @@ export default function PatentDrawer({ drawer, onClose }) {
   );
 }
 
-// ============================================
-// PLACEHOLDER VIEW
-// ============================================
-function PlaceholderView({ title }) {
+function PlaceholderView({ title, customCopy }) {
+  const copyParagraphs = customCopy || [
+    'This section is currently under development.',
+    'For now, all current intelligence is available on the Front Page — click any patent, applicant, technology, or state to explore.',
+  ];
+
   return (
     <div className="drawer-placeholder">
       <div className="drawer-placeholder-eyebrow">Coming Soon</div>
       <h2 className="drawer-placeholder-title">{title}</h2>
-      <p className="drawer-placeholder-text">
-        This section is under editorial development.
-      </p>
       <div className="drawer-placeholder-divider" />
-      <p className="drawer-placeholder-meta">
-        We're building dedicated tooling for {title.toLowerCase()}. For now,
-        all current intelligence is available on the Front Page —
-        click any patent, applicant, technology, or state to explore.
-      </p>
+      <div className="drawer-placeholder-body">
+        {copyParagraphs.map((para, i) => (
+          <p key={i} className="drawer-placeholder-para">{para}</p>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ============================================
-// LIST VIEW (filtered patents)
-// ============================================
 function ListView({ data, onPatentClick }) {
   const { title, subtitle, patents } = data;
-
   return (
     <>
       <div className="drawer-list-header">
@@ -292,7 +249,6 @@ function ListView({ data, onPatentClick }) {
         <div className="drawer-list-title">{title}</div>
         <div className="drawer-list-count">{patents.length} {patents.length === 1 ? 'patent' : 'patents'}</div>
       </div>
-
       {patents.length === 0 ? (
         <div className="drawer-empty">No patents found for this filter.</div>
       ) : (
@@ -320,12 +276,8 @@ function ListView({ data, onPatentClick }) {
   );
 }
 
-// ============================================
-// APPLICANT INDEX (browse all applicants)
-// ============================================
 function ApplicantIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
   const { title, subtitle, rows } = data;
-
   const filtered = useMemo(() => {
     if (!filterQuery || filterQuery.length < 2) return rows;
     const q = filterQuery.toLowerCase();
@@ -339,7 +291,6 @@ function ApplicantIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
         <div className="drawer-list-title">{title}</div>
         <div className="drawer-list-count">{subtitle}</div>
       </div>
-
       <div className="drawer-filter">
         <Search size={13} strokeWidth={1.8} />
         <input
@@ -349,17 +300,12 @@ function ApplicantIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
           onChange={(e) => setFilterQuery(e.target.value)}
         />
       </div>
-
       {filtered.length === 0 ? (
         <div className="drawer-empty">No applicants match "{filterQuery}".</div>
       ) : (
         <div className="drawer-index-list">
           {filtered.map((r) => (
-            <button
-              key={r.name}
-              className="drawer-index-row"
-              onClick={() => onRowClick(r.name)}
-            >
+            <button key={r.name} className="drawer-index-row" onClick={() => onRowClick(r.name)}>
               <span className="drawer-index-rank">{r.rank}</span>
               <span className="drawer-index-name">{titleCase(r.name)}</span>
               <span className="drawer-index-count">{fmt(r.count)}</span>
@@ -371,12 +317,8 @@ function ApplicantIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
   );
 }
 
-// ============================================
-// FIELD INDEX (browse all fields)
-// ============================================
 function FieldIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
   const { title, subtitle, rows } = data;
-
   const filtered = useMemo(() => {
     if (!filterQuery || filterQuery.length < 2) return rows;
     const q = filterQuery.toLowerCase();
@@ -390,7 +332,6 @@ function FieldIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
         <div className="drawer-list-title">{title}</div>
         <div className="drawer-list-count">{subtitle}</div>
       </div>
-
       <div className="drawer-filter">
         <Search size={13} strokeWidth={1.8} />
         <input
@@ -400,17 +341,12 @@ function FieldIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
           onChange={(e) => setFilterQuery(e.target.value)}
         />
       </div>
-
       {filtered.length === 0 ? (
         <div className="drawer-empty">No fields match "{filterQuery}".</div>
       ) : (
         <div className="drawer-index-list">
           {filtered.map((r) => (
-            <button
-              key={r.name}
-              className="drawer-index-row"
-              onClick={() => onRowClick(r.name)}
-            >
+            <button key={r.name} className="drawer-index-row" onClick={() => onRowClick(r.name)}>
               <span className="drawer-index-rank">{r.rank}</span>
               <span className="drawer-index-name">{titleCase(r.name)}</span>
               <span className="drawer-index-count">{fmt(r.count)}</span>
@@ -422,15 +358,11 @@ function FieldIndexView({ data, filterQuery, setFilterQuery, onRowClick }) {
   );
 }
 
-// ============================================
-// SINGLE PATENT VIEW
-// ============================================
 function PatentView({ patent }) {
   const score = (patent.mega_score || 0).toFixed(1);
   const tier =
     patent.mega_score >= 90 ? 'ULTRA' :
-    patent.mega_score >= 65 ? 'MEGA' :
-    'STANDARD';
+    patent.mega_score >= 65 ? 'MEGA' : 'STANDARD';
 
   const applicants = cleanApplicants(patent.applicants);
   const inventors = patent.inventors || [];

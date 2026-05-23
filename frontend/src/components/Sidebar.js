@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Home, Compass, Search as SearchIcon, Users, Cpu, Map, Bookmark, FileText, Menu, X } from 'lucide-react';
+import { Home, Network, Menu, X, Heart } from 'lucide-react';
 
-function RazorpayButton() {
-  const formRef = useRef(null);
+function HiddenRazorpayForm({ formRef }) {
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -13,39 +12,55 @@ function RazorpayButton() {
     script.setAttribute('data-payment_button_id', 'pl_SmUidG4BFT6t10');
     formRef.current.appendChild(script);
     mountedRef.current = true;
-  }, []);
+  }, [formRef]);
 
-  return <form ref={formRef} style={{ display: 'inline-block', width: '100%' }} />;
+  return (
+    <form
+      ref={formRef}
+      style={{
+        position: 'absolute',
+        left: '-9999px',
+        top: '-9999px',
+        opacity: 0,
+        pointerEvents: 'none',
+        height: 0,
+        overflow: 'hidden',
+      }}
+      aria-hidden="true"
+    />
+  );
 }
 
-const NAV_ITEMS = [
-  { id: 'discover',     label: 'Discover',     icon: Compass,    placeholder: true },
-  { id: 'search',       label: 'Search',       icon: SearchIcon, placeholder: true },
-  { id: 'applicants',   label: 'Applicants',   icon: Users,      placeholder: true },
-  { id: 'technologies', label: 'Technologies', icon: Cpu,        placeholder: true },
-  { id: 'explorer',     label: 'Explorer',     icon: Map,        placeholder: true },
-  { id: 'watchlists',   label: 'Watchlists',   icon: Bookmark,   placeholder: true },
-  { id: 'reports',      label: 'Reports',      icon: FileText,   placeholder: true },
-];
-
 export default function Sidebar({ settings = null, onNavClick }) {
-  const [showRazorpay, setShowRazorpay] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
+  const razorpayFormRef = useRef(null);
 
-  // Close mobile sidebar when clicking a nav item
-  const handleNavClick = (item) => {
+  const handleSupport = () => {
+    setPaymentError(null);
+    const btn = razorpayFormRef.current?.querySelector('button');
+    if (btn) {
+      // Razorpay button injected normally — click it
+      btn.click();
+    } else {
+      // Razorpay script blocked (ad-blocker, network) — graceful fallback
+      setPaymentError(
+        'Payment system unavailable. Please disable ad-blocker for this site or try another browser.'
+      );
+    }
+  };
+
+  const handleNavClick = (label) => {
     setMobileOpen(false);
-    onNavClick && onNavClick(item.label);
+    onNavClick && onNavClick(label);
   };
 
   const amount = settings?.reimbursement_amount ?? 849;
   const currency = settings?.reimbursement_currency ?? 'INR';
-  const label = settings?.reimbursement_label ?? 'Reimbursement Collected';
   const symbol = currency === 'INR' ? '₹' : currency + ' ';
 
   return (
     <>
-      {/* Mobile hamburger toggle (only visible on small screens via CSS) */}
       <button
         className="mobile-menu-toggle"
         onClick={() => setMobileOpen(!mobileOpen)}
@@ -54,7 +69,6 @@ export default function Sidebar({ settings = null, onNavClick }) {
         {mobileOpen ? <X size={18} strokeWidth={2} /> : <Menu size={18} strokeWidth={2} />}
       </button>
 
-      {/* Backdrop for mobile sidebar overlay */}
       {mobileOpen && <div className="sidebar-backdrop" onClick={() => setMobileOpen(false)} />}
 
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
@@ -68,44 +82,43 @@ export default function Sidebar({ settings = null, onNavClick }) {
         <nav className="nav">
           <div className="nav-item active" onClick={() => setMobileOpen(false)}>
             <Home className="nav-icon" size={14} strokeWidth={1.8} />
-            <span>Front Page</span>
+            <span className="nav-label">Front Page</span>
           </div>
 
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                className="nav-item nav-item-button"
-                onClick={() => handleNavClick(item)}
-              >
-                <Icon className="nav-icon" size={14} strokeWidth={1.8} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+          <button
+            className="nav-item nav-item-button"
+            onClick={() => handleNavClick('Innovation Network')}
+          >
+            <Network className="nav-icon" size={14} strokeWidth={1.8} />
+            <span className="nav-label">Innovation Network</span>
+          </button>
         </nav>
 
-        <div className="payment-widget">
-          <div className="payment-widget-label">{label}</div>
+        <div className="payment-widget community-support">
+          <div className="payment-widget-label">
+            <Heart size={10} strokeWidth={2.2} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Community Support
+          </div>
           <div className="payment-widget-amount">
-            {symbol} {Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {symbol} {Number(amount).toLocaleString('en-IN', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            })}
           </div>
           <div className="payment-widget-caption">
-            Available for future platform enhancements
+            Independent patent intelligence, funded by community goodwill.
           </div>
 
-          {!showRazorpay ? (
-            <button
-              className="payment-widget-button"
-              onClick={() => setShowRazorpay(true)}
-            >
-              Add Reimbursement
-            </button>
-          ) : (
-            <div style={{ marginTop: 12 }}>
-              <RazorpayButton />
-            </div>
+          {/* Always-enabled button. Fallback if Razorpay is ad-blocked. */}
+          <button
+            className="payment-widget-button"
+            onClick={handleSupport}
+          >
+            Support This Project
+          </button>
+
+          {paymentError && (
+            <p className="payment-error-note">{paymentError}</p>
           )}
         </div>
 
@@ -117,6 +130,8 @@ export default function Sidebar({ settings = null, onNavClick }) {
           </div>
         </div>
       </aside>
+
+      <HiddenRazorpayForm formRef={razorpayFormRef} />
     </>
   );
 }

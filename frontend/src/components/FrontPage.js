@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import Topbar from './Topbar';
 import Hero from './Hero';
 import WeeklySnapshot from './WeeklySnapshot';
@@ -7,7 +7,6 @@ import IndiaMap from './IndiaMap';
 import WeeklyIntelligence from './WeeklyIntelligence';
 import ApplicantsPanel from './ApplicantsPanel';
 import PaidNotice from './PaidNotice';
-import PatentDrawer from './PatentDrawer';
 import { useDashboardData } from '../hooks/useDashboardData';
 
 export default function FrontPage({ drawer, setDrawer }) {
@@ -32,9 +31,6 @@ export default function FrontPage({ drawer, setDrawer }) {
     lead_applicant_name: data.topApplicants?.[0]?.name || null,
   };
 
-  // ============================================
-  // DRAWER HANDLERS
-  // ============================================
   const openPatent = useCallback((patent) => {
     setDrawer({ mode: 'patent', patent });
   }, [setDrawer]);
@@ -79,7 +75,6 @@ export default function FrontPage({ drawer, setDrawer }) {
     });
   }, [setDrawer]);
 
-  // METRIC click handlers
   const openAllMega = useCallback(() => {
     setDrawer({ mode: 'all_mega' });
   }, [setDrawer]);
@@ -90,6 +85,17 @@ export default function FrontPage({ drawer, setDrawer }) {
 
   const openFieldIndex = useCallback(() => {
     setDrawer({ mode: 'field_index' });
+  }, [setDrawer]);
+
+  // NEW v3.5: clicking a live journal in WeeklyIntelligence opens its MEGA patents
+  const openJournal = useCallback((journal) => {
+    setDrawer({
+      mode: 'list',
+      filterType: 'journal',
+      filterValue: journal.journal_no,
+      filterTitle: `Journal ${journal.journal_no}`,
+      filterSubtitle: `MEGA patents from`,
+    });
   }, [setDrawer]);
 
   return (
@@ -129,6 +135,7 @@ export default function FrontPage({ drawer, setDrawer }) {
         <WeeklyIntelligence
           journals={data.journals}
           selectedJournal={latestJournal?.journal_no}
+          onJournalClick={openJournal}
         />
 
         <ApplicantsPanel
@@ -142,9 +149,7 @@ export default function FrontPage({ drawer, setDrawer }) {
 
       <PaidNotice />
 
-      {loading && (
-        <div className="loading-toast">Loading…</div>
-      )}
+      {loading && <div className="loading-toast">Loading…</div>}
     </main>
   );
 }

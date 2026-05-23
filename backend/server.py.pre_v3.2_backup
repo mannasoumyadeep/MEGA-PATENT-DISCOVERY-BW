@@ -78,16 +78,6 @@ db = None
 JOBS: Dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 
-
-# ============================================
-# DASHBOARD SETTINGS (injected by patch_server.py v3.2)
-# ============================================
-DEFAULT_SETTINGS = {
-    "reimbursement_amount": 849,
-    "reimbursement_currency": "INR",
-    "reimbursement_label": "Reimbursement Collected",
-}
-
 # Import services
 from services import (
     scrape_journals_http,
@@ -107,14 +97,6 @@ async def startup_db():
     # Create indexes
     await db.journals.create_index("journal_no", unique=True)
     await db.patents.create_index("application_no", unique=True)
-
-    # Seed dashboard settings if collection is empty (v3.2 patch)
-    try:
-        if await db.settings.count_documents({}) == 0:
-            await db.settings.insert_one({"_id": "dashboard", **DEFAULT_SETTINGS})
-            log.info("Seeded default dashboard settings")
-    except Exception as e:
-        log.warning(f"Settings seed skipped: {e}")
     await db.patents.create_index("journal_no")
     await db.patents.create_index("field")
     await db.patents.create_index("city")
@@ -226,40 +208,6 @@ async def list_journals(refresh: str = "0", full: str = "0", limit: int = 300):
     
     return {"journals": result, "total": len(result)}
 
-
-
-
-# ============================================
-# DASHBOARD SETTINGS ENDPOINTS (v3.2 patch)
-# ============================================
-@app.get("/api/settings")
-async def get_settings():
-    """Returns dashboard settings (reimbursement amount, label, etc.)"""
-    doc = await db.settings.find_one({"_id": "dashboard"})
-    if not doc:
-        return DEFAULT_SETTINGS
-    doc.pop("_id", None)
-    return doc
-
-
-@app.post("/api/settings")
-async def update_settings(settings: dict):
-    """Updates dashboard settings. POST a JSON body like:
-       {"reimbursement_amount": 1500}
-    Use curl, Postman, or MongoDB Compass to invoke this.
-    """
-    allowed = {"reimbursement_amount", "reimbursement_currency", "reimbursement_label"}
-    update = {k: v for k, v in settings.items() if k in allowed}
-    if not update:
-        raise HTTPException(400, "No valid settings provided")
-    await db.settings.update_one(
-        {"_id": "dashboard"},
-        {"$set": update},
-        upsert=True
-    )
-    doc = await db.settings.find_one({"_id": "dashboard"})
-    doc.pop("_id", None)
-    return doc
 
 @app.post("/api/journals/download")
 async def download_journal(req: DownloadRequest, background_tasks: BackgroundTasks):
