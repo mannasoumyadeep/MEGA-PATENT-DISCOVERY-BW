@@ -99,3 +99,9 @@ backend/data/uploads/*
 # Local test scripts (contain credentials)
 test_atlas.py
 check_local.pytest_atlas.py
+*.pre_rotation_bak
+*.v3.*_backup
+*.cache_backup
+.env
+.env.local
+*_backup/
