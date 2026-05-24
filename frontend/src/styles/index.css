@@ -1880,3 +1880,348 @@ a {
     transform: none;
   }
 }
+/* =========================================================
+   v3.9.1 PAYMENT MODAL + PROGRESS BAR — APPEND TO END OF index.css
+   All selectors namespaced (.amount-modal*, .support-progress*) — zero conflict risk.
+   ========================================================= */
+
+/* ---------- Quarterly Support Progress Bar ---------- */
+
+.support-progress {
+  margin: 14px 0 18px;
+  width: 100%;
+}
+
+.support-progress-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.support-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #B8860B 0%, #D4A017 100%);
+  border-radius: 2px;
+  transition: width 0.8s cubic-bezier(0.2, 0.7, 0.3, 1);
+  box-shadow: 0 0 8px rgba(184, 134, 11, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle shimmer while goal is incomplete — signals "this is live, growing" */
+.support-progress-fill:not(.is-complete)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 100%
+  );
+  animation: support-progress-shimmer 3s linear infinite;
+}
+
+.support-progress-fill.is-complete {
+  background: linear-gradient(90deg, #B8860B 0%, #D4A017 50%, #E8B829 100%);
+  box-shadow: 0 0 12px rgba(212, 160, 23, 0.45);
+}
+
+@keyframes support-progress-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+.support-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, 0.58);
+  letter-spacing: 0.02em;
+}
+
+.support-progress-meta span:last-child {
+  font-family: 'Manrope', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 8.5px;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/* ---------- Amount Modal ---------- */
+
+.amount-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: amount-modal-fade-in 0.15s ease-out;
+}
+
+.amount-modal {
+  position: relative;
+  background: var(--white, #FFFFFF);
+  width: 100%;
+  max-width: 440px;
+  border-radius: 4px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+  animation: amount-modal-slide-in 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes amount-modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes amount-modal-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.amount-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--subtle, #6B6760);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.amount-modal-close:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text, #1A1A1A);
+}
+
+.amount-modal-close:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.amount-modal-eyebrow {
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold, #B8860B);
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.amount-modal-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text, #1A1A1A);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0 0 12px 0;
+}
+
+.amount-modal-subtitle {
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--subtle, #6B6760);
+  margin: 0 0 24px 0;
+}
+
+.amount-modal-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.amount-preset {
+  padding: 14px 8px;
+  background: var(--white, #FFFFFF);
+  border: 1px solid var(--divider, #E5E0D6);
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text, #1A1A1A);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+
+.amount-preset:hover:not(:disabled) {
+  border-color: var(--gold, #B8860B);
+  background: rgba(184, 134, 11, 0.04);
+  transform: translateY(-1px);
+}
+
+.amount-preset:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.amount-modal-divider {
+  text-align: center;
+  position: relative;
+  margin: 22px 0 16px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--subtle, #6B6760);
+}
+
+.amount-modal-divider::before,
+.amount-modal-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 84px);
+  height: 1px;
+  background: var(--divider, #E5E0D6);
+}
+
+.amount-modal-divider::before { left: 0; }
+.amount-modal-divider::after  { right: 0; }
+
+.amount-modal-divider span {
+  background: var(--white, #FFFFFF);
+  padding: 0 12px;
+}
+
+.amount-modal-custom {
+  display: flex;
+  gap: 8px;
+}
+
+.amount-input-group {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--divider, #E5E0D6);
+  border-radius: 3px;
+  background: var(--white, #FFFFFF);
+  transition: border-color 0.12s;
+}
+
+.amount-input-group:focus-within { border-color: var(--gold, #B8860B); }
+
+.amount-input-prefix {
+  padding: 0 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--subtle, #6B6760);
+  border-right: 1px solid var(--divider, #E5E0D6);
+}
+
+.amount-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 11px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--text, #1A1A1A);
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.amount-input::-webkit-outer-spin-button,
+.amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.amount-submit {
+  padding: 11px 18px;
+  background: var(--gold, #B8860B);
+  color: var(--white, #FFFFFF);
+  border: none;
+  border-radius: 3px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.amount-submit:hover:not(:disabled) { background: var(--gold-dim, #9C7308); }
+.amount-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.amount-modal-error {
+  margin: 16px 0 0 0;
+  padding: 10px 12px;
+  background: rgba(199, 62, 29, 0.06);
+  border-left: 2px solid #C73E1D;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #C73E1D;
+}
+
+.amount-modal-footnote {
+  margin: 22px 0 0 0;
+  text-align: center;
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-size: 11px;
+  color: var(--subtle, #6B6760);
+}
+
+.payment-success-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(184, 134, 11, 0.12);
+  border-left: 2px solid var(--gold, #B8860B);
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+  animation: payment-success-fade-in 0.3s ease-out;
+}
+
+@keyframes payment-success-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Mobile adjustments ---------- */
+
+@media (max-width: 480px) {
+  .amount-modal {
+    padding: 28px 20px 20px;
+    max-width: 100%;
+  }
+  .amount-modal-title { font-size: 20px; }
+  .amount-modal-subtitle { font-size: 12.5px; }
+  .amount-modal-presets { gap: 6px; }
+  .amount-preset {
+    padding: 12px 6px;
+    font-size: 13.5px;
+  }
+  .amount-modal-custom { flex-direction: column; }
+  .amount-submit { padding: 13px 18px; }
+
+  .support-progress-meta {
+    font-size: 9px;
+  }
+  .support-progress-meta span:last-child {
+    font-size: 8px;
+  }
+}

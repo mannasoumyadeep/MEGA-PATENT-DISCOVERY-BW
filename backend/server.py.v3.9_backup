@@ -753,29 +753,10 @@ if __name__ == "__main__":
 # ============================================
 # DASHBOARD SETTINGS GET (v3.8.4 - computed from payments)
 # ============================================
-
-
-
-
-# ============================================
-# RAZORPAY WEBHOOK (v3.8.4)
-# Handles payment.captured, payment.failed, refund.processed.
-# HMAC-verified, idempotent, strips PII.
-# ============================================
-
-
-# ============================================
-# PAYMENTS AUDIT ENDPOINT
-# ============================================
-
-
-# ============================================
-# DASHBOARD SETTINGS GET (v3.9.1 - now includes target_amount)
-# ============================================
 @app.get("/api/settings")
 async def get_settings():
-    """Returns dashboard settings with auto-computed Community Support total
-       AND the quarterly target amount for the progress bar."""
+    """Returns dashboard settings with auto-computed Community Support total.
+       Total = base_amount + sum(captured payments) - sum(processed refunds)."""
     try:
         doc = await db.settings.find_one({"_id": "dashboard"}) or {}
     except Exception:
@@ -818,31 +799,18 @@ async def get_settings():
         "captured_total": round(captured_total, 2),
         "refunded_total": round(refunded_total, 2),
         "payment_count": payment_count,
-        "target_amount": float(doc.get("target_amount", 10000)),
     }
 
 
 @app.post("/api/settings")
 async def update_settings(settings: dict):
-    """Manually override base_amount or target_amount."""
+    """Manually override base_amount (starting balance, before payments)."""
     from fastapi import HTTPException
-    allowed = {"base_amount", "target_amount", "reimbursement_currency", "reimbursement_label"}
-    update = {}
-    for k, v in settings.items():
-        if k in allowed:
-            if k in ("base_amount", "target_amount"):
-                try:
-                    update[k] = float(v)
-                except (TypeError, ValueError):
-                    raise HTTPException(400, f"{k} must be a number")
-            else:
-                update[k] = v
+    allowed = {"base_amount", "reimbursement_currency", "reimbursement_label"}
+    update = {k: v for k, v in settings.items() if k in allowed}
 
     if "reimbursement_amount" in settings and "base_amount" not in update:
-        try:
-            update["base_amount"] = float(settings["reimbursement_amount"])
-        except (TypeError, ValueError):
-            raise HTTPException(400, "reimbursement_amount must be a number")
+        update["base_amount"] = float(settings["reimbursement_amount"])
 
     if not update:
         raise HTTPException(400, "No valid settings provided")
@@ -856,76 +824,7 @@ async def update_settings(settings: dict):
 
 
 # ============================================
-# RAZORPAY STANDARD CHECKOUT - ORDER CREATION (v3.9.1)
-# ============================================
-@app.post("/api/create-order")
-async def create_order(request: dict):
-    """Create a Razorpay order for Standard Checkout.
-       Frontend posts: { "amount": int (in paise), "currency": "INR" }
-       Returns: { order_id, amount, currency, key_id }"""
-    from fastapi import HTTPException
-    import urllib.request
-    import urllib.error
-    import base64
-    import time as _time
-
-    key_id = os.getenv("RAZORPAY_KEY_ID", "")
-    key_secret = os.getenv("RAZORPAY_KEY_SECRET", "")
-
-    if not key_id or not key_secret:
-        raise HTTPException(
-            500,
-            "Razorpay API credentials not configured. "
-            "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on Render."
-        )
-
-    amount = int(request.get("amount", 0))
-    currency = request.get("currency", "INR")
-
-    if amount < 100 or amount > 50_000_000:
-        raise HTTPException(400, "Amount must be between Rs 1 and Rs 5,00,000")
-    if currency != "INR":
-        raise HTTPException(400, "Only INR currency supported")
-
-    auth = base64.b64encode(f"{key_id}:{key_secret}".encode()).decode()
-    payload = json.dumps({
-        "amount": amount,
-        "currency": currency,
-        "receipt": f"support_{int(_time.time())}",
-        "payment_capture": 1,
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.razorpay.com/v1/orders",
-        data=payload,
-        headers={
-            "Authorization": f"Basic {auth}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=15) as response:
-            order = json.loads(response.read())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:500]
-        raise HTTPException(e.code, f"Razorpay API error: {body}")
-    except urllib.error.URLError as e:
-        raise HTTPException(503, f"Razorpay API unreachable: {e}")
-    except Exception as e:
-        raise HTTPException(500, f"Order creation failed: {e}")
-
-    return {
-        "order_id": order["id"],
-        "amount": order["amount"],
-        "currency": order["currency"],
-        "key_id": key_id,
-    }
-
-
-# ============================================
-# RAZORPAY WEBHOOK (v3.9.1)
+# RAZORPAY WEBHOOK (v3.8.4)
 # Handles payment.captured, payment.failed, refund.processed.
 # HMAC-verified, idempotent, strips PII.
 # ============================================
@@ -955,6 +854,7 @@ async def razorpay_webhook(request: Request):
         raise HTTPException(400, "Invalid JSON payload")
 
     event_type = event.get("event", "")
+
     KNOWN_EVENTS = ("payment.captured", "payment.failed", "refund.processed")
     if event_type not in KNOWN_EVENTS:
         return {"status": "ok", "ignored": event_type}
@@ -978,7 +878,11 @@ async def razorpay_webhook(request: Request):
         "event_type": event_type,
     })
     if existing:
-        return {"status": "ok", "duplicate": True, "payment_id": razorpay_event_id}
+        return {
+            "status": "ok",
+            "duplicate": True,
+            "payment_id": razorpay_event_id,
+        }
 
     amount_paise = int(entity.get("amount") or 0)
     amount_rupees = amount_paise / 100.0
