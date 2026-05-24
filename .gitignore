@@ -98,4 +98,4 @@ backend/data/uploads/*
 
 # Local test scripts (contain credentials)
 test_atlas.py
-check_local.py
+check_local.pytest_atlas.py
