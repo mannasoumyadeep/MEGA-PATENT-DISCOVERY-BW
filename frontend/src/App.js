@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import Sidebar from './components/Sidebar';
 import FrontPage from './components/FrontPage';
 import PatentDrawer from './components/PatentDrawer';
@@ -55,6 +56,7 @@ export default function App() {
       <Sidebar settings={settings} onNavClick={handleSidebarNav} />
       <FrontPage drawer={drawer} setDrawer={setDrawer} />
       <PatentDrawer drawer={drawer} onClose={() => setDrawer(null)} />
+      <Analytics />
     </div>
   );
 }
